@@ -36,37 +36,30 @@ def process_onet_pdf(file_path: str) -> tuple[bool, str]:
             logger.warning(f"Could not find 'Printed for:' in {file_path}")
             return False, "Could not find 'Printed for:' in the document"
 
-        # Extract name
-        name = match.group(1).strip()
-        logger.info(f"Extracted name from PDF: {name}")
+        # Extract and format name
+        full_name = match.group(1).strip()
+        # Split into first and last name
+        name_parts = full_name.split()
+        if len(name_parts) < 2:
+            logger.warning(f"Could not split name into first and last: {full_name}")
+            return False, "Invalid name format"
+            
+        # Handle multiple first or last names by joining with underscore
+        first_name = '_'.join(name_parts[:-1]).title()
+        last_name = name_parts[-1].title()
         
-        # Get today's date
-        today = datetime.now().strftime("%Y-%m-%d")
+        # Get today's date in MMDDYYYY format
+        today = datetime.now().strftime("%m%d%Y")
         
-        # Create new filename
-        directory = os.path.dirname(file_path)
-        new_filename = f"ONET Interest Profiler-{name}-{today}.pdf"
-        new_filepath = os.path.join(directory, new_filename)
-        
-        # Handle duplicate filenames
-        counter = 1
-        while os.path.exists(new_filepath):
-            logger.info(f"File {new_filepath} already exists, trying new name")
-            new_filename = f"ONET Interest Profiler-{name}-{today}_{counter}.pdf"
-            new_filepath = os.path.join(directory, new_filename)
-            counter += 1
-        
-        # Rename the file
-        logger.info(f"Renaming {file_path} to {new_filepath}")
-        os.rename(file_path, new_filepath)
-        logger.info(f"Successfully renamed PDF to: {new_filename}")
+        # Create new filename in required format: O_NET_Profile_FirstName_LastName_MMDDYYYY.pdf
+        new_filename = f"O_NET_Profile_{first_name}_{last_name}_{today}.pdf"
+        logger.info(f"Generated new filename: {new_filename}")
         
         return True, new_filename
 
     except Exception as e:
-        error_msg = f"Error processing PDF {file_path}: {str(e)}"
-        logger.error(error_msg, exc_info=True)
-        return False, error_msg
+        logger.error(f"Error processing O*NET PDF {file_path}: {str(e)}")
+        return False, f"Error processing PDF: {str(e)}"
 
 def is_onet_profile(file_path: str) -> bool:
     """

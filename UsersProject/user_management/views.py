@@ -1459,16 +1459,24 @@ class ScanViewSet(viewsets.ViewSet):
 
                 for src_path in pdf_files:
                     try:
-                        # Copy file to destination
-                        dst_path = os.path.join(computer_dir, os.path.basename(src_path))
-                        copy_network_file(src_path, dst_path)
-                        processed += 1
-                        
-                        # Update stats
-                        self._current_scan_stats['processed_pdfs'] += 1
-                        if src_path != dst_path:
-                            self._current_scan_stats['renamed_pdfs'] += 1
+                        # Process the PDF file
+                        success, result = process_onet_pdf(src_path)
+                        if success:
+                            # Copy file to destination with new name
+                            dst_path = os.path.join(computer_dir, result)
+                            copy_network_file(src_path, dst_path)
+                            processed += 1
                             renamed += 1
+                            self._current_scan_stats['processed_pdfs'] += 1
+                            self._current_scan_stats['renamed_pdfs'] += 1
+                            self.logger.info(f"Successfully processed and renamed: {result}")
+                        else:
+                            # Copy file without renaming if it's not an O*NET PDF
+                            dst_path = os.path.join(computer_dir, os.path.basename(src_path))
+                            copy_network_file(src_path, dst_path)
+                            processed += 1
+                            self._current_scan_stats['processed_pdfs'] += 1
+                            self.logger.info(f"Copied without renaming: {os.path.basename(src_path)}")
                             
                     except Exception as e:
                         self.logger.error(f"Error processing {src_path}: {str(e)}")
