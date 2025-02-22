@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="bg-gray-100">
+    <div class="min-h-screen flex">
+        <!-- Sidebar -->
+        <div class="bg-gray-800 text-white w-64 py-6 flex flex-col">
+            <div class="px-6 mb-8">
+                <h1 class="text-2xl font-bold">Admin Dashboard</h1>
+            </div>
+            <nav class="flex-1">
+                <a href="{% url 'admin_dashboard' %}" class="block px-6 py-3 hover:bg-gray-700 {% if request.path == '/admin/' %}bg-gray-700{% endif %}">
+                    <i class="fas fa-home mr-3"></i>Dashboard
+                </a>
+                <a href="{% url 'user_list' %}" class="block px-6 py-3 hover:bg-gray-700">
+                    <i class="fas fa-users mr-3"></i>Users
+                </a>
+                <a href="{% url 'computer_list' %}" class="block px-6 py-3 hover:bg-gray-700">
+                    <i class="fas fa-desktop mr-3"></i>Computers
+                </a>
+                <a href="{% url 'document_list' %}" class="block px-6 py-3 hover:bg-gray-700">
+                    <i class="fas fa-file-pdf mr-3"></i>Documents
+                </a>
+                <a href="{% url 'audit_logs' %}" class="block px-6 py-3 hover:bg-gray-700">
+                    <i class="fas fa-history mr-3"></i>Audit Logs
+                </a>
+            </nav>
+            <div class="px-6 py-4 border-t border-gray-700">
+                <div class="flex items-center">
+                    <i class="fas fa-user-circle text-2xl mr-3"></i>
+                    <div>
+                        <p class="font-semibold">{{ request.user.username }}</p>
+                        <a href="{% url 'logout' %}" class="text-sm text-gray-400 hover:text-white">Logout</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="flex-1">
+            <!-- Top Navigation -->
+            <div class="bg-white shadow-sm">
+                <div class="container mx-auto px-6 py-4 flex justify-between items-center">
+                    <div class="flex items-center">
+                        <button class="text-gray-500 hover:text-gray-600 focus:outline-none">
+                            <i class="fas fa-bars text-xl"></i>
+                        </button>
+                    </div>
+                    <div class="flex items-center">
+                        <button class="relative text-gray-500 hover:text-gray-600 focus:outline-none mr-4">
+                            <i class="fas fa-bell text-xl"></i>
+                            <span class="absolute top-0 right-0 -mt-1 -mr-1 bg-red-500 text-white rounded-full text-xs px-2">3</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Dashboard Content -->
+            {% block content %}
+            <div class="container mx-auto px-6 py-8">
+                <h2 class="text-2xl font-semibold mb-8">Dashboard Overview</h2>
+                
+                <!-- Quick Stats -->
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                    <div class="bg-white rounded-lg shadow-sm p-6">
+                        <div class="flex items-center">
+                            <div class="p-3 bg-blue-500 rounded-lg">
+                                <i class="fas fa-users text-white text-2xl"></i>
+                            </div>
+                            <div class="ml-4">
+                                <p class="text-gray-500">Total Users</p>
+                                <p class="text-2xl font-semibold">{{ total_users }}</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-lg shadow-sm p-6">
+                        <div class="flex items-center">
+                            <div class="p-3 bg-green-500 rounded-lg">
+                                <i class="fas fa-desktop text-white text-2xl"></i>
+                            </div>
+                            <div class="ml-4">
+                                <p class="text-gray-500">Active Computers</p>
+                                <p class="text-2xl font-semibold">{{ active_computers }}</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-lg shadow-sm p-6">
+                        <div class="flex items-center">
+                            <div class="p-3 bg-yellow-500 rounded-lg">
+                                <i class="fas fa-file-pdf text-white text-2xl"></i>
+                            </div>
+                            <div class="ml-4">
+                                <p class="text-gray-500">Total Documents</p>
+                                <p class="text-2xl font-semibold">{{ total_documents }}</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-lg shadow-sm p-6">
+                        <div class="flex items-center">
+                            <div class="p-3 bg-purple-500 rounded-lg">
+                                <i class="fas fa-clock text-white text-2xl"></i>
+                            </div>
+                            <div class="ml-4">
+                                <p class="text-gray-500">Recent Scans</p>
+                                <p class="text-2xl font-semibold">{{ recent_scans }}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quick Actions -->
+                <div class="bg-white rounded-lg shadow-sm p-6 mb-8">
+                    <h3 class="text-lg font-semibold mb-4">Quick Actions</h3>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <a href="{% url 'create_user' %}" class="flex flex-col items-center p-4 bg-gray-50 rounded-lg hover:bg-gray-100">
+                            <div class="p-3 bg-blue-500 rounded-full mb-2">
+                                <i class="fas fa-user-plus text-white text-xl"></i>
+                            </div>
+                            <span class="text-sm font-medium">Create User</span>
+                        </a>
+                        <a href="{% url 'add_computer' %}" class="flex flex-col items-center p-4 bg-gray-50 rounded-lg hover:bg-gray-100">
+                            <div class="p-3 bg-green-500 rounded-full mb-2">
+                                <i class="fas fa-plus-circle text-white text-xl"></i>
+                            </div>
+                            <span class="text-sm font-medium">Add Computer</span>
+                        </a>
+                        <a href="{% url 'start_scan' %}" class="flex flex-col items-center p-4 bg-gray-50 rounded-lg hover:bg-gray-100">
+                            <div class="p-3 bg-yellow-500 rounded-full mb-2">
+                                <i class="fas fa-sync text-white text-xl"></i>
+                            </div>
+                            <span class="text-sm font-medium">Start Scan</span>
+                        </a>
+                        <a href="{% url 'view_logs' %}" class="flex flex-col items-center p-4 bg-gray-50 rounded-lg hover:bg-gray-100">
+                            <div class="p-3 bg-purple-500 rounded-full mb-2">
+                                <i class="fas fa-list text-white text-xl"></i>
+                            </div>
+                            <span class="text-sm font-medium">View Logs</span>
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Recent Activity -->
+                <div class="bg-white rounded-lg shadow-sm p-6">
+                    <h3 class="text-lg font-semibold mb-4">Recent Activity</h3>
+                    <div class="space-y-4">
+                        {% for log in recent_logs %}
+                        <div class="flex items-center p-4 bg-gray-50 rounded-lg">
+                            <div class="p-2 bg-blue-100 rounded-full mr-4">
+                                <i class="fas fa-info-circle text-blue-500"></i>
+                            </div>
+                            <div>
+                                <p class="font-medium">{{ log.message }}</p>
+                                <p class="text-sm text-gray-500">{{ log.timestamp|timesince }} ago</p>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            {% endblock %}
+        </div>
+    </div>
+
+    {% block extra_scripts %}{% endblock %}
+    <script>
+        // Add any JavaScript functionality here
+        document.addEventListener('DOMContentLoaded', function() {
+            // Sidebar toggle
+            const sidebarToggle = document.querySelector('.fa-bars');
+            const sidebar = document.querySelector('.bg-gray-800');
+            
+            sidebarToggle.addEventListener('click', function() {
+                sidebar.classList.toggle('-translate-x-full');
+            });
+        });
+    </script>
+</body>
+</html>

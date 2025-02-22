@@ -1,0 +1,2 @@
+# Update computer status every 5 hours
+0 */5 * * * cd d:/Code/aw/labv2/UsersProject && python manage.py update_computer_status >> logs/computer_status.log 2>&1

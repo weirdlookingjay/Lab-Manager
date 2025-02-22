@@ -1,0 +1,18 @@
+{% if error_type == 'scan_error' %}SCANNING ERROR ALERT
+{% elif error_type == 'pdf_error' %}PDF PROCESSING ERROR
+{% else %}COMPUTER OFFLINE ALERT{% endif %}
+
+{{ title }}
+
+{{ message }}
+
+ERROR DETAILS:
+{% for key, value in details.items %}
+{{ key }}: {{ value }}
+{% endfor %}
+
+Reported at: {{ timestamp }}
+
+---
+This is an automated notification from your Lab Management System.
+To manage your notification preferences, please visit the admin dashboard.

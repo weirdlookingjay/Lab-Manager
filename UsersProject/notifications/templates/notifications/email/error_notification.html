@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .header {
+            background-color: #f44336;
+            color: white;
+            padding: 20px;
+            text-align: center;
+            border-radius: 8px 8px 0 0;
+        }
+        .content {
+            background-color: #ffffff;
+            padding: 20px;
+            border: 1px solid #e0e0e0;
+            border-radius: 0 0 8px 8px;
+        }
+        .error-details {
+            background-color: #f5f5f5;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 20px;
+        }
+        .error-details table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .error-details td {
+            padding: 8px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        .error-details td:first-child {
+            font-weight: bold;
+            width: 30%;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 20px;
+            color: #666;
+            font-size: 12px;
+        }
+        .timestamp {
+            color: #666;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h2>{% if error_type == 'scan_error' %}
+                🔍 Scanning Error Alert
+                {% elif error_type == 'pdf_error' %}
+                📄 PDF Processing Error
+                {% else %}
+                💻 Computer Offline Alert
+                {% endif %}</h2>
+        </div>
+        <div class="content">
+            <p><strong>{{ title }}</strong></p>
+            <p>{{ message }}</p>
+            
+            <div class="error-details">
+                <h3>Error Details</h3>
+                <table>
+                    {% for key, value in details.items %}
+                    <tr>
+                        <td>{{ key }}</td>
+                        <td>{{ value }}</td>
+                    </tr>
+                    {% endfor %}
+                </table>
+            </div>
+            
+            {% if has_attachments %}
+            <div class="attachments" style="margin-top: 20px; padding: 15px; background-color: #e3f2fd; border-radius: 4px;">
+                <p style="margin: 0;">📎 This email includes PDF attachments. Please check the attachments section of your email client.</p>
+            </div>
+            {% endif %}
+            
+            <div class="timestamp">
+                Reported at: {{ timestamp }}
+            </div>
+            
+            <div class="footer">
+                <p>This is an automated notification from your Lab Management System.</p>
+                <p>To manage your notification preferences, please visit the admin dashboard.</p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
