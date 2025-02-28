@@ -13,6 +13,7 @@ from .authentication import CookieTokenAuthentication
 from rest_framework.views import APIView
 from rest_framework.parsers import JSONParser
 from rest_framework.authtoken.models import Token
+from .utils.network import scan_network_directory
 import logging
 import glob
 import shutil
@@ -27,6 +28,7 @@ import random
 import string
 from PyPDF2 import PdfReader
 import json
+import unicodedata
 
 # Get the User model
 User = get_user_model()
@@ -43,10 +45,9 @@ from .models import (
 from .serializers import (
     UserSerializer, ComputerSerializer, TagSerializer,
     SystemLogSerializer, AuditLogSerializer,
-    NotificationSerializer, FileTransferSerializer,
-    ScanScheduleSerializer, LogAggregationSerializer,
-    LogPatternSerializer, LogAlertSerializer,
-    LogCorrelationSerializer
+    NotificationSerializer, ScanScheduleSerializer,
+    LogAggregationSerializer, LogPatternSerializer,
+    LogAlertSerializer, LogCorrelationSerializer
 )
 
 # Base classes for views
@@ -203,22 +204,24 @@ def run_cmd_with_retry(cmd, max_retries=3, delay=2):
     return False
 
 def cleanup_network_connections():
-    """Clean up network connections for a specific computer."""
+    """Clean up network connections."""
     try:
-        # Only list connections, don't disconnect everything
-        os.system('net use')
+        # List current connections
+        log_scan_operation("Listing current network connections", event="NETWORK_CHECK")
+        result = subprocess.run('net use', shell=True, capture_output=True, text=True)
+        
+        if result.returncode == 0:
+            # Parse output to find and disconnect existing connections
+            connections = result.stdout.split('\n')
+            for line in connections:
+                if '\\\\' in line:  # Line contains a network path
+                    # Extract the network path
+                    path = line.split()[1]
+                    log_scan_operation(f"Disconnecting from {path}", event="NETWORK_CLEANUP")
+                    # Disconnect the connection
+                    subprocess.run(f'net use {path} /delete /y', shell=True, check=False)
     except Exception as e:
-        logger.error(f"Error listing network connections: {str(e)}")
-
-def disconnect_network_drive(computer_ip):
-    """Disconnect a specific network drive."""
-    try:
-        # Only disconnect the specific computer's share
-        cmd = f'net use \\\\{computer_ip}\\C$ /delete /y'
-        os.system(cmd)
-        logger.info(f"Disconnected from \\\\{computer_ip}\\C$")
-    except Exception as e:
-        logger.error(f"Error disconnecting from {computer_ip}: {str(e)}")
+        log_scan_operation(f"Error cleaning up network connections: {str(e)}", "error", event="NETWORK_ERROR")
 
 def establish_network_connection(computer_ip, username='Client', password=None):
     """Authenticate to the remote computer using net use."""
@@ -229,45 +232,32 @@ def establish_network_connection(computer_ip, username='Client', password=None):
         # First try with computer's credentials if provided
         if username and password:
             connect_cmd = f'net use \\\\{computer_ip}\\C$ /user:"{username}" "{password}" /persistent:no /y'
-            result = os.system(connect_cmd)
-            if result == 0:
+            result = subprocess.run(connect_cmd, shell=True, capture_output=True, text=True)
+            if result.returncode == 0:
                 log_scan_operation(f"Successfully connected to \\\\{computer_ip}\\C$ with computer credentials", event="NETWORK_CONNECTED")
                 return True
                 
         # If computer credentials failed or weren't provided, try admin credentials
-        admin_username = os.getenv('ADMIN_USERNAME', 'infotech')
-        admin_password = os.getenv('ADMIN_PASSWORD', 'gidget003')
-        connect_cmd = f'net use \\\\{computer_ip}\\C$ /user:"{admin_username}" "{admin_password}" /persistent:no /y'
-        result = os.system(connect_cmd)
+        admin_username = os.getenv('ADMIN_USERNAME')
+        admin_password = os.getenv('ADMIN_PASSWORD')
         
-        if result == 0:
+        if not admin_username or not admin_password:
+            log_scan_operation("Admin credentials not found in environment variables", "error", event="NETWORK_ERROR")
+            return False
+            
+        connect_cmd = f'net use \\\\{computer_ip}\\C$ /user:"{admin_username}" "{admin_password}" /persistent:no /y'
+        result = subprocess.run(connect_cmd, shell=True, capture_output=True, text=True)
+        
+        if result.returncode == 0:
             log_scan_operation(f"Successfully connected to \\\\{computer_ip}\\C$ with admin credentials", event="NETWORK_CONNECTED")
             return True
         else:
-            log_scan_operation(f"Failed to connect to {computer_ip} with both sets of credentials", "error", event="NETWORK_ERROR")
+            error_msg = result.stderr.strip() if result.stderr else "Unknown error"
+            log_scan_operation(f"Failed to connect to {computer_ip} with both sets of credentials: {error_msg}", "error", event="NETWORK_ERROR")
             return False
             
     except Exception as e:
         log_scan_operation(f"Error connecting to {computer_ip}: {str(e)}", "error", event="NETWORK_ERROR")
-        return False
-
-def copy_network_file(src_path, dst_path):
-    """Copy a file from network share to local destination."""
-    try:
-        # Check if destination already exists
-        if os.path.exists(dst_path):
-            logger.info(f"File already exists at destination: {dst_path}")
-            return False
-            
-        # Create destination directory if it doesn't exist
-        os.makedirs(os.path.dirname(dst_path), exist_ok=True)
-        
-        # Copy the file with metadata
-        shutil.copy2(src_path, dst_path)
-        logger.info(f"Successfully copied {os.path.basename(src_path)} to {dst_path}")
-        return True
-    except Exception as e:
-        logger.error(f"Error copying {src_path} to {dst_path}: {str(e)}")
         return False
 
 def sanitize_filename(filename):
@@ -309,13 +299,20 @@ def get_base_filename(filename):
         log_scan_operation(f"Normalized filename '{filename}' to base name '{name}.pdf'")
         return name + '.pdf'
     # For O*NET files
-    elif filename.startswith('O_NET'):
-        # Remove the .pdf extension
-        name = filename.replace('.pdf', '')
-        # Remove any date suffix
-        name = re.sub(r'-\d{2}-\d{2}-\d{4}$', '', name)
+    elif 'O_NET' in filename.upper():
+        # Remove the .pdf extension and any spaces
+        name = filename.replace('.pdf', '').replace(' ', '_')
+        # Remove any (N) suffix
+        name = re.sub(r'\s*\(\d+\)$', '', name)
+        # Remove any date patterns
+        name = re.sub(r'[_-]\d{2}[_-]\d{2}[_-]\d{4}$', '', name)  # MM-DD-YYYY or MM_DD_YYYY
+        name = re.sub(r'_\d{8}$', '', name)  # _MMDDYYYY
+        # Remove Perfil_ prefix (Spanish)
+        name = name.replace('Perfil_', '')
+        # Normalize O_NET prefix
+        name = re.sub(r'^O[_-]?NET[_-]?(?:Profile)?[_-]?', 'O_NET_', name, flags=re.IGNORECASE)
         # Log the transformation
-        log_scan_operation(f"Normalized filename '{filename}' to base name '{name}.pdf'")
+        log_scan_operation(f"Normalized O*NET filename '{filename}' to base name '{name}.pdf'")
         return name + '.pdf'
     return filename
 
@@ -343,6 +340,7 @@ def is_duplicate_file(filename, dir_path):
                 
         log_scan_operation(f"No duplicates found for {filename}", event="FILE_DUPLICATE_CHECK")
         return False
+        
     except Exception as e:
         log_scan_operation(f"Error checking for duplicates: {str(e)}", "error", event="FILE_DUPLICATE_CHECK")
         return False
@@ -366,6 +364,7 @@ def is_duplicate_strengthsprofile(directory, name):
             if clean_file == pattern:
                 return True
         return False
+        
     except Exception as e:
         logger.error(f"Error checking for duplicates: {str(e)}")
         return False
@@ -373,164 +372,244 @@ def is_duplicate_strengthsprofile(directory, name):
 def is_duplicate_onet(directory, name):
     """Check if an O*NET file already exists for this person."""
     try:
-        # Create pattern without any Windows-style numbering
-        pattern = f"O_NET_Profile_{name.replace(' ', '-')}.pdf"
+        if not name:
+            return False
+            
+        # First normalize the name to handle special characters
+        normalized_name = normalize_name(name)
+        if not normalized_name or normalized_name == "Unknown_Name":
+            return False
+            
+        # Get current date
+        current_date = datetime.now().strftime("%m%d%Y")
         
-        # List all files in directory
-        for file in os.listdir(directory):
-            # Clean up existing filename (remove any (1), (2) etc)
-            clean_file = re.sub(r' \(\d+\)\.pdf$', '.pdf', file)
-            if clean_file.lower() == pattern.lower():
-                return True
-                
-        # If no exact match, try to read content of potential matches
-        for file in os.listdir(directory):
-            if file.lower().startswith('o_net') and file.lower().endswith('.pdf'):
-                try:
-                    file_path = os.path.join(directory, file)
-                    reader = PdfReader(file_path)
-                    content = reader.pages[0].extract_text()
-                    existing_name = extract_name_from_onet(content)
-                    if existing_name and existing_name.lower() == name.lower():
-                        return True
-                except Exception as e:
-                    logger.error(f"Error checking O*NET file {file}: {str(e)}")
+        # Generate the pattern to match
+        pattern = f"O_NET_Interest_Profiler_{normalized_name}_{current_date}.pdf"
+        log_scan_operation(f"Checking for O*NET duplicates with pattern: {pattern}")
+        
+        # List all files in directory using os.scandir() instead of os.listdir()
+        try:
+            for entry in os.scandir(directory):
+                if not entry.is_file():
                     continue
+                    
+                file = entry.name
+                if 'O_NET' in file.upper():
+                    # Normalize the existing filename for comparison
+                    existing_name = normalize_name(file)
+                    if not existing_name:
+                        continue
+                        
+                    if pattern.lower() == file.lower():
+                        log_scan_operation(f"Found duplicate O*NET file: {file}")
+                        return True
+                        
+                    # If names don't match exactly, try content comparison
+                    try:
+                        file_path = os.path.join(directory, file)
+                        reader = PdfReader(file_path)
+                        content = reader.pages[0].extract_text()
+                        pdf_name = extract_name_from_onet(content)
+                        if pdf_name:
+                            pdf_name = normalize_name(pdf_name)
+                            if pdf_name == normalized_name:
+                                log_scan_operation(f"Found duplicate O*NET by content: {file}")
+                                return True
+                    except Exception as e:
+                        logger.error(f"Error checking PDF content in {file}: {str(e)}")
+                        continue
+        except Exception as e:
+            logger.error(f"Error listing directory {directory}: {str(e)}")
+            return False
+                
+        log_scan_operation(f"No duplicate O*NET found for {normalized_name}")
         return False
+        
     except Exception as e:
-        logger.error(f"Error checking for O*NET duplicates: {str(e)}")
+        logger.error(f"Error in is_duplicate_onet: {str(e)}")
         return False
 
 def extract_name_from_onet(content):
     """Extract name from O*NET Interest Profiler PDF content."""
     try:
-        # The name is usually the first line before 'VIA Character Strengths Profile'
         lines = content.split('\n')
-        for i, line in enumerate(lines[:5]):  # Check first 5 lines
-            if 'VIA Character Strengths Profile' in line:
-                if i > 0:  # Make sure we have a previous line
-                    name = lines[i-1].strip()
-                    # Clean up any extra spaces
-                    name = ' '.join(name.split())
-                    # Capitalize each word
-                    name = ' '.join(word.capitalize() for word in name.split())
-                    logger.info(f"Found name in O_NET: {name}")
+        
+        for line in lines[:10]:  # Check first 10 lines
+            line = line.strip()
+            if not line:
+                continue
+                
+            lower_line = line.lower()
+            if "printed for:" in lower_line:
+                name = line.split(":", 1)[1].strip()
+                if name and len(name.split()) >= 2:
+                    logger.info(f"Extracted name from O*NET: {name}", extra={'event': 'PARSE_ONET_PDF'})
+                    return name
+            elif "copia impresa para:" in lower_line:
+                name = line.split(":", 1)[1].strip()
+                if name and len(name.split()) >= 2:
+                    logger.info(f"Extracted name from O*NET: {name}", extra={'event': 'PARSE_ONET_PDF'})
                     return name
                     
-        # Fallback: try to find name in filename if content extraction fails
-        logger.warning("Could not extract name from O*NET content")
         return None
         
     except Exception as e:
-        logger.error(f"Error extracting name from O*NET: {str(e)}")
+        logger.error(f"Error parsing O*NET PDF: {str(e)}", extra={'event': 'PARSE_ONET_PDF'})
         return None
 
 def extract_name_from_strengthsprofile(content):
-    """Extract name from StrengthsProfile PDF content."""
+    """Extract name from StrengthsProfile PDF content"""
     try:
-        # The name is usually the first line before 'VIA Character Strengths Profile'
         lines = content.split('\n')
-        for i, line in enumerate(lines[:5]):  # Check first 5 lines
-            if 'VIA Character Strengths Profile' in line:
-                if i > 0:  # Make sure we have a previous line
-                    name = lines[i-1].strip()
-                    # Clean up any extra spaces
-                    name = ' '.join(name.split())
-                    # Capitalize each word
-                    name = ' '.join(word.capitalize() for word in name.split())
-                    logger.info(f"Found name in StrengthsProfile: {name}")
-                    return name
-                    
-        # Fallback: try to find name in filename if content extraction fails
-        logger.warning("Could not extract name from StrengthsProfile content")
+        for line in lines[:5]:  # Check first 5 lines
+            line = line.strip()
+            if not line or len(line) > 50:  # Skip empty lines or too long lines
+                continue
+            if any(marker in line.lower() for marker in ['printed for:', 'copia impresa para:']):
+                continue
+            if line:
+                logger.info(f"Extracted name from StrengthsProfile: {line}", extra={'event': 'PARSE_STRENGTHSPROFILE_PDF'})
+                return line
         return None
         
     except Exception as e:
-        logger.error(f"Error extracting name from StrengthsProfile: {str(e)}")
+        logger.error(f"Error parsing StrengthsProfile PDF: {str(e)}", extra={'event': 'PARSE_STRENGTHSPROFILE_PDF'})
         return None
 
-def is_duplicate_strengthsprofile(directory, name, content):
-    """Check if a StrengthsProfile file already exists for this person today."""
+def extract_name_from_pdf(self, pdf_file):
+    """Extract name from PDF content using specific markers"""
     try:
-        # Get today's date
-        today = datetime.now().strftime('%m-%d-%Y')
+        self.logger.info(f"Extracting name from PDF: {pdf_file}", extra={'event': 'EXTRACT_NAME_FROM_PDF'})
+        # Open and read PDF content
+        reader = PdfReader(pdf_file)
+        page = reader.pages[0]
+        content = page.extract_text()
+        self.logger.debug(f"Extracted PDF content (first 500 chars): {repr(content[:500])}", extra={'event': 'EXTRACT_NAME_FROM_PDF'})
         
-        # Create pattern without any Windows-style numbering
-        pattern = f"StrengthsProfile_{name.replace(' ', '-')}-{today}.pdf"
+        # Determine file type from filename
+        filename = os.path.basename(pdf_file).lower()
         
-        # First check for exact filename match
-        for file in os.listdir(directory):
-            # Clean up existing filename (remove any (1), (2) etc)
-            clean_file = re.sub(r' \(\d+\)\.pdf$', '.pdf', file)
-            if clean_file.lower() == pattern.lower():
-                return True
-        
-        # If no exact match, check content of potential matches
-        for file in os.listdir(directory):
-            if file.lower().startswith('strengthsprofile') and file.lower().endswith('.pdf'):
-                try:
-                    file_path = os.path.join(directory, file)
-                    reader = PdfReader(file_path)
-                    file_content = reader.pages[0].extract_text()
+        # For Perfil files, first try to extract from filename if it follows the expected pattern
+        if 'perfil' in filename:
+            # Try to extract name from filename first (Perfil_O_NET_Profile_Name_Date.pdf)
+            if '_Profile_' in filename:
+                name_part = filename.split('_Profile_')[1].rsplit('_', 1)[0]
+                raw_name = name_part.replace('_', ' ').strip()
+                
+                # Capitalize first letter of each word
+                raw_name = ' '.join(word.capitalize() for word in raw_name.split())
+                
+                self.logger.info(f"Extracted name from Perfil filename: {raw_name}", extra={'event': 'EXTRACT_NAME_FROM_PDF'})
+                return raw_name
+                
+            # If filename parsing fails, try content
+            name = self.parse_perfil_pdf(content)
+            if name:
+                return name
+            else:
+                self.logger.error("Failed to extract name from Perfil PDF content", extra={'event': 'EXTRACT_NAME_FROM_PDF'})
+                return None
+            
+        # For O*NET files
+        elif 'o_net' in filename:
+            name = self.parse_onet_pdf(content)
+            if name:
+                self.logger.info(f"Found name in O_NET: {name}", extra={'event': 'EXTRACT_NAME_FROM_PDF'})
+                return name
+            else:
+                self.logger.warning(f"No name found in O_NET file: {pdf_file}", extra={'event': 'EXTRACT_NAME_FROM_PDF'})
+                return None
+            
+        # For StrengthsProfile files
+        elif filename.startswith('strengths'):
+            name = self.parse_strengthsprofile_pdf(content)
+            if name:
+                self.logger.info(f"Found name in StrengthsProfile: {name}", extra={'event': 'EXTRACT_NAME_FROM_PDF'})
+                return name
+            else:
+                self.logger.warning(f"No name found in StrengthsProfile file: {pdf_file}", extra={'event': 'EXTRACT_NAME_FROM_PDF'})
+                return None
+        else:
+            self.logger.warning(f"Unknown file type: {pdf_file}", extra={'event': 'EXTRACT_NAME_FROM_PDF'})
+            return None
                     
-                    # Extract name from existing file
-                    existing_name = extract_name_from_strengthsprofile(file_content)
-                    if existing_name and existing_name.lower() == name.lower():
-                        # Check if file is from today
-                        if today in file:
-                            return True
-                except Exception as e:
-                    logger.error(f"Error checking StrengthsProfile file {file}: {str(e)}")
-                    continue
-        return False
     except Exception as e:
-        logger.error(f"Error checking for StrengthsProfile duplicates: {str(e)}")
-        return False
+        self.logger.error(f"Error extracting name from PDF {pdf_file}: {str(e)}", extra={'event': 'EXTRACT_NAME_FROM_PDF'})
+        return None
 
 def normalize_name(name):
-    """Normalize a name for consistent comparison and display."""
+    """Normalize a name by removing spaces and special characters"""
     if not name:
         return None
         
-    # Convert to lowercase and remove extra spaces
+    # Process name in lowercase first
     name = name.strip().lower()
+    
     # Replace multiple spaces with single space
     name = ' '.join(name.split())
     
-    # Convert to PascalCase with underscores
-    name = '_'.join(word.capitalize() for word in name.split())
+    # Fix common patterns where single letters are split from names
+    name = re.sub(r'([a-z]+)\s+([a-z])(?:\s|$)', r'\1\2', name)
     
-    logger.info(f"Normalized name: {name}")
-    return name
+    # Fix cases where two-letter prefixes are split
+    name = re.sub(r'\b([a-z]{2})\s+([a-z]+)\b', r'\1\2', name)
+    
+    # Convert to title case after fixing patterns
+    name = ' '.join(part.capitalize() for part in name.split())
+    
+    # Replace spaces with underscores
+    name = name.replace(' ', '_')
+    
+    # Remove any remaining special characters
+    name = re.sub(r'[^a-zA-Z0-9_]', '', name)
+    
+    return name if name else "Unknown_Name"
 
-def process_onet_pdf(text, current_date):
+def process_onet_pdf(file_path, current_date=None):
     """Process O*NET Interest Profiler PDF and return new filename."""
     try:
-        # Split at "Printed for:" and take the second part
-        after_printed = text.split("Printed for:")[1]
+        # First read the PDF content
+        reader = PdfReader(file_path)
+        content = ""
+        for page in reader.pages:
+            content += page.extract_text()
+
+        # Skip if this is specifically a Job Zones document
+        content_lines = content.splitlines()
         
-        # Take everything up to the next O*NET or end of line
-        name = after_printed.split("O*NET")[0].strip()
-        logger.debug(f"Raw name before cleanup: {repr(name)}")
+        # Check if "Job Zones" appears as a main heading (by itself on a line)
+        # We look at the first few lines where headings typically appear
+        for line in content_lines[:10]:
+            if line.strip().lower() == 'job zones':
+                logger.info(f"Skipping Job Zones document: {file_path}", extra={'event': 'PROCESS_ONET_PDF'})
+                return False, "Job Zones document - not processing"
+
+        # Now extract name from the content
+        name = extract_name_from_onet(content)
+        if not name:
+            logger.error(f"Could not extract name from O*NET PDF: {file_path}")
+            return False, "Could not extract name from PDF" 
+
+        # Normalize name for filename
+        name = unicodedata.normalize('NFKD', name).encode('ascii', 'ignore').decode('ascii')
+        name = normalize_name(name)
         
-        # Remove any non-alphanumeric characters except spaces
-        name = re.sub(r'[^a-zA-Z\s]', '', name)
+        # Get current date if not provided
+        if not current_date:
+            current_date = datetime.now()
         
-        # Normalize spaces and fix common PDF text issues
-        name = ' '.join(name.split())
+        # Format date as MMDDYYYY
+        date_str = current_date.strftime("%m%d%Y")
         
-        # Handle split letters at end of words (e.g., "sanche z" -> "sanchez")
-        name = re.sub(r'(\w+)\s+([a-z])(?=\s|$)', r'\1\2', name, flags=re.IGNORECASE)
+        # Create new filename in required format using the normalized name directly
+        new_filename = f"O_NET_Interest_Profiler_{name}_{date_str}.pdf"
         
-        # Handle specific cases where words might be incorrectly split
-        name = name.replace('ar agones', 'aragones')
+        logger.info(f"Generated new filename: {new_filename}")
+        return True, new_filename
         
-        logger.info(f"Found name in O_NET: {name}")
-        return name
-            
     except Exception as e:
-        logger.error(f"Error extracting name from O*NET PDF: {str(e)}")
-        return None
+        logger.error(f"Error processing O*NET PDF {file_path}: {str(e)}")
+        return False, str(e)
 
 def tag_document(document_name, tag_name):
     """Add a tag to a document."""
@@ -586,78 +665,13 @@ def clean_up_duplicates(computer_name):
             except Exception as e:
                 logger.error(f"Error deleting duplicate file {old_file}: {str(e)}")
 
-def scan_network_directory(ip_address):
-    """Scan a network computer for PDF files.
-    
-    Args:
-        ip_address (str): IP address of the computer to scan
-        
-    Returns:
-        list: List of paths to PDF files found on the computer
-    """
-    logger = logging.getLogger('scan_operations')
-    logger.info(f"Starting network directory scan for {ip_address}")
-    
-    try:
-        # Construct network path
-        network_path = fr'\\{ip_address}\c$'
-        logger.info(f"Scanning network path: {network_path}")
-        
-        # List to store found PDF files
-        pdf_files = []
-        
-        # Common locations to check for PDFs
-        search_paths = [
-            'Users',
-            'Documents and Settings',
-            'Downloads',
-            'Desktop'
-        ]
-        
-        # Walk through each search path
-        for base_path in search_paths:
-            full_path = os.path.join(network_path, base_path)
-            if not os.path.exists(full_path):
-                logger.debug(f"Path does not exist: {full_path}")
-                continue
-                
-            logger.info(f"Scanning directory: {full_path}")
-            
-            # Walk through directory tree
-            for root, dirs, files in os.walk(full_path):
-                # Skip certain directories
-                dirs[:] = [d for d in dirs if d.lower() not in [
-                    'appdata', 'application data', 'temp', 'tmp', 
-                    'cache', 'system volume information'
-                ]]
-                
-                # Check each file
-                for file in files:
-                    if file.lower().endswith('.pdf'):
-                        full_file_path = os.path.join(root, file)
-                        try:
-                            # Verify we can access the file
-                            if os.access(full_file_path, os.R_OK):
-                                pdf_files.append(full_file_path)
-                                logger.debug(f"Found PDF: {full_file_path}")
-                        except Exception as e:
-                            logger.warning(f"Could not access file {full_file_path}: {str(e)}")
-                            continue
-        
-        logger.info(f"Found {len(pdf_files)} PDF files on {ip_address}")
-        return pdf_files
-        
-    except Exception as e:
-        logger.error(f"Error scanning network directory {ip_address}: {str(e)}", exc_info=True)
-        return []
-
-class UserViewSet(viewsets.ModelViewSet):
+class UserViewSet(mixins.ListModelMixin, mixins.CreateModelMixin, mixins.RetrieveModelMixin, mixins.UpdateModelMixin, mixins.DestroyModelMixin, viewsets.GenericViewSet):
     """ViewSet for managing user operations."""
     queryset = CustomUser.objects.all()
     serializer_class = UserSerializer
     permission_classes = [IsAuthenticated]
     authentication_classes = [CookieTokenAuthentication, TokenAuthentication, SessionAuthentication]
-
+    
     def get_queryset(self):
         """
         Optionally restricts the returned users based on query parameters
@@ -947,24 +961,176 @@ class ComputerViewSet(viewsets.ModelViewSet):
         """Scan a specific directory on the computer."""
         computer = self.get_object()
         directory = request.data.get('directory', '')
-        
         try:
-            # Implement directory scanning logic here
-            files = scan_network_directory(computer.ip_address)
-            return Response({'files': files})
+            log_scan_operation(f"Starting directory scan for {computer.name} at path: {directory}")
+            
+            # Get the destination directory
+            dest_dir = os.path.join(settings.MEDIA_ROOT, 'pdfs', computer.name)
+            os.makedirs(dest_dir, exist_ok=True)
+            
+            # Scan network directory
+            files = scan_network_directory(computer.ip_address, share_path=directory)
+            
+            if not files:
+                log_scan_operation(f"No PDF files found on {computer.name}", "warning", event="NO_FILES_FOUND")
+                success = True  # Consider this a successful scan, just with no files
+                return success
+                
+            # Validate files and collect processable ones
+            valid_files = []
+            for file_path in files:
+                try:
+                    # Check if file is accessible
+                    if not check_file_access(file_path):
+                        log_scan_operation(f"Skipping inaccessible file: {file_path}", "warning", event="FILE_ACCESS_ERROR")
+                        continue
+                    
+                    # Process O*NET PDF to get new filename
+                    success, new_filename = process_onet_pdf(file_path)
+                    if not success:
+                        log_scan_operation(f"Error processing O*NET PDF {file_path}: {new_filename}", "error", event="FILE_PROCESSING_ERROR")
+                        continue
+                        
+                    valid_files.append((file_path, new_filename))
+                    
+                except Exception as file_error:
+                    log_scan_operation(f"Error validating file {file_path}: {str(file_error)}", "error", event="FILE_PROCESSING_ERROR")
+                    continue
+            
+            # Only create destination directory if we have valid files to process
+            if valid_files:
+                dest_dir = os.path.join(settings.MEDIA_ROOT, 'pdfs', computer.name)
+                os.makedirs(dest_dir, exist_ok=True)
+                log_scan_operation(f"Created destination directory: {dest_dir}", event="DIRECTORY_CREATED")
+                
+                # Process valid files
+                processed_count = 0
+                for file_path, new_filename in valid_files:
+                    try:
+                        # Check for duplicates before copying
+                        if is_duplicate_onet(dest_dir, new_filename):
+                            log_scan_operation(f"Skipping duplicate O*NET file: {new_filename}", "info", event="DUPLICATE_FILE")
+                            continue
+                            
+                        # Create destination path with new filename
+                        dest_path = os.path.join(dest_dir, new_filename)
+                        
+                        # Copy file to destination with new name
+                        shutil.copy2(file_path, dest_path)
+                        log_scan_operation(f"Copied and renamed file: {os.path.basename(file_path)} -> {new_filename}", event="FILE_RENAMED")
+                        processed_count += 1
+                        
+                    except Exception as copy_error:
+                        log_scan_operation(f"Error copying file {file_path}: {str(copy_error)}", "error", event="FILE_PROCESSING_ERROR")
+                        continue
+                
+                log_scan_operation(f"Successfully processed {processed_count} files from {computer.name}", event="SCAN_SUCCESS")
+            else:
+                log_scan_operation(f"No valid files to process from {computer.name}", "warning", event="NO_VALID_FILES")
+            
+            success = True
+            
         except Exception as e:
-            return Response(
-                {'error': str(e)},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+            log_scan_operation(f"Error scanning {computer.name}: {str(e)}", "error", event="SCAN_ERROR")
+            success = False
+            
+        finally:
+            try:
+                # Always try to disconnect and log the result
+                self._disconnect_computer(computer)
+                log_scan_operation(f"Successfully disconnected from {computer.name}", event="DISCONNECT_SUCCESS")
+            except Exception as disconnect_error:
+                log_scan_operation(f"Error disconnecting from {computer.name}: {str(disconnect_error)}", "error", event="DISCONNECT_ERROR")
+                
+        return success
 
-class FileOperationsView(viewsets.ModelViewSet):
-    serializer_class = FileTransferSerializer
-    permission_classes = [IsAuthenticated]
-    authentication_classes = [CookieTokenAuthentication, TokenAuthentication, SessionAuthentication]
-
-    def get_queryset(self):
-        return FileTransfer.objects.all()
+    @action(detail=True, methods=['post'])
+    def scan_directory(self, request, pk=None):
+        """Scan a specific directory on the computer."""
+        computer = self.get_object()
+        directory = request.data.get('directory', '')
+        try:
+            log_scan_operation(f"Starting directory scan for {computer.name} at path: {directory}")
+            
+            # Get the destination directory
+            dest_dir = os.path.join(settings.MEDIA_ROOT, 'pdfs', computer.name)
+            os.makedirs(dest_dir, exist_ok=True)
+            
+            # Scan network directory
+            files = scan_network_directory(computer.ip_address, share_path=directory)
+            
+            if not files:
+                log_scan_operation(f"No PDF files found on {computer.name}", "warning", event="NO_FILES_FOUND")
+                success = True  # Consider this a successful scan, just with no files
+                return success
+                
+            # Validate files and collect processable ones
+            valid_files = []
+            for file_path in files:
+                try:
+                    # Check if file is accessible
+                    if not check_file_access(file_path):
+                        log_scan_operation(f"Skipping inaccessible file: {file_path}", "warning", event="FILE_ACCESS_ERROR")
+                        continue
+                    
+                    # Process O*NET PDF to get new filename
+                    success, new_filename = process_onet_pdf(file_path)
+                    if not success:
+                        log_scan_operation(f"Error processing O*NET PDF {file_path}: {new_filename}", "error", event="FILE_PROCESSING_ERROR")
+                        continue
+                        
+                    valid_files.append((file_path, new_filename))
+                    
+                except Exception as file_error:
+                    log_scan_operation(f"Error validating file {file_path}: {str(file_error)}", "error", event="FILE_PROCESSING_ERROR")
+                    continue
+            
+            # Only create destination directory if we have valid files to process
+            if valid_files:
+                dest_dir = os.path.join(settings.MEDIA_ROOT, 'pdfs', computer.name)
+                os.makedirs(dest_dir, exist_ok=True)
+                log_scan_operation(f"Created destination directory: {dest_dir}", event="DIRECTORY_CREATED")
+                
+                # Process valid files
+                processed_count = 0
+                for file_path, new_filename in valid_files:
+                    try:
+                        # Check for duplicates before copying
+                        if is_duplicate_onet(dest_dir, new_filename):
+                            log_scan_operation(f"Skipping duplicate O*NET file: {new_filename}", "info", event="DUPLICATE_FILE")
+                            continue
+                            
+                        # Create destination path with new filename
+                        dest_path = os.path.join(dest_dir, new_filename)
+                        
+                        # Copy file to destination with new name
+                        shutil.copy2(file_path, dest_path)
+                        log_scan_operation(f"Copied and renamed file: {os.path.basename(file_path)} -> {new_filename}", event="FILE_RENAMED")
+                        processed_count += 1
+                        
+                    except Exception as copy_error:
+                        log_scan_operation(f"Error copying file {file_path}: {str(copy_error)}", "error", event="FILE_PROCESSING_ERROR")
+                        continue
+                
+                log_scan_operation(f"Successfully processed {processed_count} files from {computer.name}", event="SCAN_SUCCESS")
+            else:
+                log_scan_operation(f"No valid files to process from {computer.name}", "warning", event="NO_VALID_FILES")
+            
+            success = True
+            
+        except Exception as e:
+            log_scan_operation(f"Error scanning {computer.name}: {str(e)}", "error", event="SCAN_ERROR")
+            success = False
+            
+        finally:
+            try:
+                # Always try to disconnect and log the result
+                self._disconnect_computer(computer)
+                log_scan_operation(f"Successfully disconnected from {computer.name}", event="DISCONNECT_SUCCESS")
+            except Exception as disconnect_error:
+                log_scan_operation(f"Error disconnecting from {computer.name}: {str(disconnect_error)}", "error", event="DISCONNECT_ERROR")
+                
+        return success
 
 class AuditLogView(BaseViewSet,
                   mixins.ListModelMixin,
@@ -1022,94 +1188,146 @@ class ScanViewSet(viewsets.ViewSet):
     _scan_in_progress = False
     _scan_queue = []
     _current_scan_stats = {
-        'processed_pdfs': 0,
-        'renamed_pdfs': 0,
-        'computers_scanned': 0,
-        'total_computers': 0,
-        'start_time': None,
-        'estimated_completion': None,
-        'per_computer_progress': {},
-        'failed_computers': [],
-        'retry_attempts': {}
-    }
+            'processed_pdfs': 0,
+            'computers_scanned': 0,
+            'total_computers': 0,
+            'start_time': None,
+            'estimated_completion': None,
+            'per_computer_progress': {},
+            'failed_computers': [],
+            'retry_attempts': {}
+        }
     MAX_RETRIES = 3
     SCAN_TIMEOUT = 3600
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Ensure data directory exists
         self.data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
         os.makedirs(self.data_dir, exist_ok=True)
         self.logger = logging.getLogger('scan_operations')
-    
+
     def parse_onet_pdf(self, content):
-        """Extract name from O*NET PDF content"""
+        """Extract name from O*NET PDF content with improved validation and edge case handling"""
         try:
             import re
-            self.logger.info(f"Parsing O*NET PDF content: {content[:200]}...")
-            marker = 'Printed for:'
-            if marker in content:
-                # Get everything after the marker up to the next newline or O*NET
-                raw_name = content.split(marker)[1].split('\n')[0].split('O*NET')[0]
-                self.logger.debug(f"Raw name after marker split: {repr(raw_name)}")
-                
-                # Clean spaces and remove any non-letter characters
-                name = raw_name.strip()
-                self.logger.debug(f"Name after strip: {repr(name)}")
-                
-                name = re.sub(r'[^a-zA-Z\s]', '', name)
-                self.logger.debug(f"Name after removing non-letters: {repr(name)}")
-                
-                name = re.sub(r'\s+', ' ', name).strip()
-                self.logger.debug(f"Name after normalizing spaces: {repr(name)}")
-                
-                # Handle split letters at end of words (e.g., "sanche z" -> "sanchez")
-                name = re.sub(r'(\w+)\s+([a-z])(?=\s|$)', r'\1\2', name, flags=re.IGNORECASE)
-                
-                # Handle specific cases where words might be incorrectly split
-                name = name.replace('ar agones', 'aragones')
-                
-                self.logger.info(f"Found name in O_NET: {name}")
-                return name
+            self.logger.info(f"Parsing O*NET PDF content: {content[:200]}...", extra={'event': 'PARSE_ONET_PDF'})
             
-            self.logger.warning(f"Could not find marker '{marker}' in content")
-            return None
-        
+            # First verify this is a valid O*NET Career List document
+            required_markers = [
+                ['Printed for:', 'Copia impresa para:'],  # English and Spanish
+                ['O*NET'],  
+                ['Career List', 'Lista de Carreras']  # English and Spanish
+            ]
+            
+            # Check that at least one variant of each required marker is present
+            for marker_variants in required_markers:
+                if not any(marker in content for marker in marker_variants):
+                    self.logger.warning(f"Missing required markers {marker_variants} in O*NET PDF", extra={'event': 'PARSE_ONET_PDF'})
+                    return None
+            
+            # Try to extract name after English or Spanish marker
+            name_markers = ['Printed for:', 'Copia impresa para:']
+            raw_name = None
+            for marker in name_markers:
+                if marker in content:
+                    # Get everything after marker up to the next newline or O*NET/Perfil
+                    raw_name = content.split(marker)[1].split('\n')[0]
+                    raw_name = raw_name.split('O*NET')[0].split('Perfil')[0]
+                    break
+                    
+            if not raw_name:
+                self.logger.warning("Could not find name after any known markers", extra={'event': 'PARSE_ONET_PDF'})
+                return None
+                
+            self.logger.debug(f"Raw name after marker split: {repr(raw_name)}", extra={'event': 'PARSE_ONET_PDF'})
+            
+            # Clean spaces and remove any non-letter characters
+            name = raw_name.strip()
+            self.logger.debug(f"Name after strip: {repr(name)}", extra={'event': 'PARSE_ONET_PDF'})
+            
+            # Remove any non-letter characters except spaces and hyphens
+            name = re.sub(r'[^a-zA-Z\s\-]', '', name)
+            self.logger.debug(f"Name after removing non-letters: {repr(name)}", extra={'event': 'PARSE_ONET_PDF'})
+            
+            # Normalize spaces (including multiple spaces)
+            name = re.sub(r'\s+', ' ', name).strip()
+            self.logger.debug(f"Name after normalizing spaces: {repr(name)}", extra={'event': 'PARSE_ONET_PDF'})
+            
+            # Convert to lowercase for consistent processing
+            name = name.lower()
+            
+            # Handle split prefixes first (e.g. "ar agones" -> "aragones")
+            # Look for specific prefix patterns   
+            name = re.sub(r'\b([a-z]{2})\s+([a-z]+)\b', r'\1\2', name)
+            
+            # Handle split letters at end of words (e.g., "sanche z" -> "sanchez")
+            name = re.sub(r'(\w+)\s+([a-z])(?=\s|$)', r'\1\2', name)
+            
+            # Handle Spanish name prefixes with pattern matching
+            name = re.sub(r'\b(de)\s*l?\s*(os|as?)\b', r'de \2', name)
+            name = re.sub(r'\b(de)\s*la\b', r'de la', name)
+            
+            # Handle Mc/Mac variations with pattern matching
+            name = re.sub(r'\b(mc|mac)\s*donald\b', lambda m: 'macdonald' if m.group(1) == 'mac' else 'mcdonald', name)
+            
+            # Convert to title case for final output
+            name = ' '.join(part.capitalize() for part in name.split())
+            
+            # Validate name format
+            if name and len(name.split()) >= 2:
+                self.logger.info(f"Successfully extracted and formatted name: {name}", extra={'event': 'PARSE_ONET_PDF'})
+                return name
+            else:
+                self.logger.warning(f"Invalid name format - too few parts: {name}", extra={'event': 'PARSE_ONET_PDF'})
+                return None
+            
         except Exception as e:
-            self.logger.error(f"Error parsing O*NET PDF: {str(e)}")
+            self.logger.error(f"Error parsing O*NET PDF: {str(e)}", extra={'event': 'PARSE_ONET_PDF'})
             return None
 
     def parse_perfil_pdf(self, content):
         """Extract name from Perfil PDF content"""
         try:
             import re
-            self.logger.info(f"Parsing Perfil PDF content: {repr(content[:500])}...")
+            self.logger.info(f"Parsing Perfil PDF content: {repr(content[:500])}...", extra={'event': 'PARSE_PERFIL_PDF'})
             
             # Normalize spaces in content first
             normalized_content = re.sub(r'\s+', ' ', content)
-            self.logger.debug(f"Normalized content: {repr(normalized_content[:200])}")
+            self.logger.debug(f"Normalized content: {repr(normalized_content[:200])}", extra={'event': 'PARSE_PERFIL_PDF'})
             
-            # Try to find the name using regex to handle variable spaces
-            match = re.search(r'Copia\s+impr?\s*esa\s+par\s*a:\s*([a-zA-Z\s]+?)(?=\n|Perfil|$)', content, re.IGNORECASE)
-            if match:
-                raw_name = match.group(1)
-                self.logger.debug(f"Raw name from regex: {repr(raw_name)}")
-                
-                # Clean spaces and remove any non-letter characters
-                name = raw_name.strip()
-                name = re.sub(r'[^a-zA-Z\s]', '', name)
-                name = re.sub(r'\s+', ' ', name).strip()
-                self.logger.debug(f"Name after cleaning: {repr(name)}")
-                
-                if name:
-                    self.logger.info(f"Found name in Perfil: {name}")
-                    return name
+            # Try multiple regex patterns to handle different formats
+            patterns = [
+                # Standard format
+                r'Copia\s+impr?e?s[ao]\s*par[ao]?\s*:?\s*([a-zA-ZáéíóúñÁÉÍÓÚÑ\s\-]+?)(?=\n|Perfil|$)',
+                # Alternative format sometimes seen
+                r'(?:Impreso|Imprimido)\s+para\s*:?\s*([a-zA-ZáéíóúñÁÉÍÓÚÑ\s\-]+?)(?=\n|Perfil|$)',
+                # Backup pattern with just the name
+                r'(?:Perfil\s+de\s+)?([a-zA-ZáéíóúñÁÉÍÓÚÑ\s\-]{2,50}?)(?=\n|Perfil|$)'
+            ]
             
-            self.logger.warning("Could not find name in Perfil content, will try filename")
+            for pattern in patterns:
+                match = re.search(pattern, normalized_content, re.IGNORECASE)
+                if match:
+                    raw_name = match.group(1)
+                    self.logger.debug(f"Raw name from regex: {repr(raw_name)}", extra={'event': 'PARSE_PERFIL_PDF'})
+                    
+                    # Clean spaces and remove any non-letter characters while preserving Spanish characters
+                    name = raw_name.strip()
+                    name = re.sub(r'[^a-zA-ZáéíóúñÁÉÍÓÚÑ\s\-]', '', name)
+                    name = re.sub(r'\s+', ' ', name).strip()
+                    self.logger.debug(f"Name after cleaning: {repr(name)}", extra={'event': 'PARSE_PERFIL_PDF'})
+                    
+                    # Validate name length and content
+                    if name and len(name.split()) >= 1 and len(name) >= 2:
+                        self.logger.info(f"Found name in Perfil: {name}", extra={'event': 'PARSE_PERFIL_PDF'})
+                        return name
+                    
+            self.logger.warning("No valid name found in Perfil PDF", extra={'event': 'PARSE_PERFIL_PDF'})
             return None
         
         except Exception as e:
-            self.logger.error(f"Error parsing Perfil PDF: {str(e)}")
+            self.logger.error(f"Error parsing Perfil PDF: {str(e)}", extra={'event': 'PARSE_PERFIL_PDF'})
             return None
 
     def parse_strengthsprofile_pdf(self, content):
@@ -1123,23 +1341,23 @@ class ScanViewSet(viewsets.ViewSet):
                 if any(marker in line.lower() for marker in ['printed for:', 'copia impresa para:']):
                     continue
                 if line:
-                    self.logger.info(f"Extracted name from StrengthsProfile: {line}")
+                    self.logger.info(f"Extracted name from StrengthsProfile: {line}", extra={'event': 'PARSE_STRENGTHSPROFILE_PDF'})
                     return line
             return None
         
         except Exception as e:
-            self.logger.error(f"Error parsing StrengthsProfile PDF: {str(e)}")
+            self.logger.error(f"Error parsing StrengthsProfile PDF: {str(e)}", extra={'event': 'PARSE_STRENGTHSPROFILE_PDF'})
             return None
 
     def extract_name_from_pdf(self, pdf_file):
         """Extract name from PDF content using specific markers"""
         try:
-            self.logger.info(f"Extracting name from PDF: {pdf_file}")
+            self.logger.info(f"Extracting name from PDF: {pdf_file}", extra={'event': 'EXTRACT_NAME_FROM_PDF'})
             # Open and read PDF content
             reader = PdfReader(pdf_file)
             page = reader.pages[0]
             content = page.extract_text()
-            self.logger.debug(f"Extracted PDF content (first 500 chars): {repr(content[:500])}")
+            self.logger.debug(f"Extracted PDF content (first 500 chars): {repr(content[:500])}", extra={'event': 'EXTRACT_NAME_FROM_PDF'})
             
             # Determine file type from filename
             filename = os.path.basename(pdf_file).lower()
@@ -1154,7 +1372,7 @@ class ScanViewSet(viewsets.ViewSet):
                     # Capitalize first letter of each word
                     raw_name = ' '.join(word.capitalize() for word in raw_name.split())
                     
-                    self.logger.info(f"Extracted name from Perfil filename: {raw_name}")
+                    self.logger.info(f"Extracted name from Perfil filename: {raw_name}", extra={'event': 'EXTRACT_NAME_FROM_PDF'})
                     return raw_name
                 
                 # If filename parsing fails, try content
@@ -1162,28 +1380,34 @@ class ScanViewSet(viewsets.ViewSet):
                 if name:
                     return name
                 else:
-                    self.logger.error("Failed to extract name from Perfil PDF content")
+                    self.logger.error("Failed to extract name from Perfil PDF content", extra={'event': 'EXTRACT_NAME_FROM_PDF'})
                     return None
             
             # For O*NET files
             elif 'o_net' in filename:
                 name = self.parse_onet_pdf(content)
                 if name:
-                    self.logger.info(f"Found name in O_NET: {name}")
+                    self.logger.info(f"Found name in O_NET: {name}", extra={'event': 'EXTRACT_NAME_FROM_PDF'})
                     return name
+                else:
+                    self.logger.warning(f"No name found in O_NET file: {pdf_file}", extra={'event': 'EXTRACT_NAME_FROM_PDF'})
+                    return None
             
             # For StrengthsProfile files
             elif filename.startswith('strengths'):
                 name = self.parse_strengthsprofile_pdf(content)
                 if name:
-                    self.logger.info(f"Found name in StrengthsProfile: {name}")
+                    self.logger.info(f"Found name in StrengthsProfile: {name}", extra={'event': 'EXTRACT_NAME_FROM_PDF'})
                     return name
+                else:
+                    self.logger.warning(f"No name found in StrengthsProfile file: {pdf_file}", extra={'event': 'EXTRACT_NAME_FROM_PDF'})
+                    return None
             else:
-                self.logger.warning(f"Unknown file type: {pdf_file}")
+                self.logger.warning(f"Unknown file type: {pdf_file}", extra={'event': 'EXTRACT_NAME_FROM_PDF'})
                 return None
                     
         except Exception as e:
-            self.logger.error(f"Error extracting name from PDF {pdf_file}: {str(e)}")
+            self.logger.error(f"Error extracting name from PDF {pdf_file}: {str(e)}", extra={'event': 'EXTRACT_NAME_FROM_PDF'})
             return None
 
     @action(detail=False, methods=['post'])
@@ -1217,7 +1441,6 @@ class ScanViewSet(viewsets.ViewSet):
             self._scan_in_progress = True
             self._current_scan_stats = {
                 'processed_pdfs': 0,
-                'renamed_pdfs': 0,
                 'computers_scanned': 0,
                 'total_computers': len(computer_objects),
                 'start_time': timezone.now(),
@@ -1231,7 +1454,7 @@ class ScanViewSet(viewsets.ViewSet):
             thread = threading.Thread(target=self._scan_thread, args=(computer_objects,))
             thread.daemon = True
             thread.start()
-            self.logger.info(f"Started scan thread for {len(computer_objects)} computers")
+            self.logger.info(f"Started scan thread for {len(computer_objects)} computers", extra={'event': 'SCAN_START'})
 
             return Response({
                 "message": f"Scan started for {len(computer_objects)} computers",
@@ -1239,7 +1462,7 @@ class ScanViewSet(viewsets.ViewSet):
             })
             
         except Exception as e:
-            self.logger.error(f"Error starting scan: {str(e)}")
+            self.logger.error(f"Error starting scan: {str(e)}", extra={'event': 'SCAN_ERROR'})
             self._scan_in_progress = False
             return Response({"error": f"Failed to start scan: {str(e)}"}, status=500)
 
@@ -1272,12 +1495,11 @@ class ScanViewSet(viewsets.ViewSet):
                             })
                     except Exception as e:
                         logger.error(f"Error processing folder {folder_path}: {str(e)}")
-                        continue
 
             return Response(folders)
             
         except Exception as e:
-            self.logger.error(f"Error listing folders: {str(e)}")
+            self.logger.error(f"Error listing folders: {str(e)}", extra={'event': 'FOLDER_LIST_ERROR'})
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=False, methods=['get'])
@@ -1292,8 +1514,8 @@ class ScanViewSet(viewsets.ViewSet):
 
         # Calculate estimated completion time
         if self._current_scan_stats['computers_scanned'] > 0:
-            elapsed_time = timezone.now() - self._current_scan_stats['start_time']
-            avg_time_per_computer = elapsed_time / self._current_scan_stats['computers_scanned']
+            elapsed = (timezone.now() - self._current_scan_stats['start_time']).total_seconds()
+            avg_time_per_computer = elapsed / self._current_scan_stats['computers_scanned']
             remaining_computers = self._current_scan_stats['total_computers'] - self._current_scan_stats['computers_scanned']
             estimated_remaining_seconds = avg_time_per_computer * remaining_computers
             self._current_scan_stats['estimated_completion'] = (
@@ -1322,26 +1544,121 @@ class ScanViewSet(viewsets.ViewSet):
         try:
             ip = computer.ip_address if hasattr(computer, 'ip_address') else computer
             network_path = fr'\\{ip}\c$'
-            self.logger.info(f"Disconnecting from {computer.label} ({network_path})")
+            self.logger.info(f"Disconnecting from {getattr(computer, 'label', ip)} ({network_path})", extra={'event': 'DISCONNECT_COMPUTER'})
             result = subprocess.run(['net', 'use', network_path, '/delete', '/y'], 
                          capture_output=True, text=True)
             if result.returncode == 0:
-                self.logger.info(f"Successfully disconnected from {computer.label}")
+                self.logger.info(f"Successfully disconnected from {getattr(computer, 'label', ip)}", extra={'event': 'DISCONNECT_COMPUTER'})
             else:
                 # If the error is that we're not connected, that's fine
                 if "The network connection could not be found" not in result.stderr:
-                    self.logger.warning(f"Disconnect command for {computer.label} returned: {result.stderr}")
+                    self.logger.warning(f"Disconnect command for {getattr(computer, 'label', ip)} returned: {result.stderr}", extra={'event': 'DISCONNECT_COMPUTER'})
         except Exception as e:
-            self.logger.error(f"Error disconnecting from {computer.label}: {str(e)}", exc_info=True)
+            self.logger.error(f"Error disconnecting from {getattr(computer, 'label', ip)}: {str(e)}", extra={'event': 'DISCONNECT_COMPUTER'})
+
+    def _connect_to_computer(self, computer):
+        """Establish network connection to computer"""
+        return establish_network_connection(computer.ip_address)
+
+    def _scan_single_computer(self, computer):
+        """
+        Scan a single computer for PDF files.
+        Returns True if scan was successful, False otherwise.
+        """
+        success = False
+        computer_label = getattr(computer, 'label', computer.ip_address)
+        try:
+            log_scan_operation(f"Starting scan for computer {computer_label}", event="SCAN_START")
+            
+            # Connect to the computer
+            if not self._connect_to_computer(computer):
+                log_scan_operation(f"Failed to connect to {computer_label}", "error", event="CONNECTION_ERROR")
+                return False
+                
+            # Scan for PDF files
+            log_scan_operation(f"Searching for PDF files on {computer_label}", event="SCAN_SEARCH")
+            files = scan_network_directory(computer.ip_address)
+            
+            if not files:
+                log_scan_operation(f"No PDF files found on {computer_label}", "warning", event="NO_FILES_FOUND")
+                success = True  # Consider this a successful scan, just with no files
+                return success
+                
+            # Validate files and collect processable ones
+            valid_files = []
+            for file_path in files:
+                try:
+                    # Check if file is accessible
+                    if not check_file_access(file_path):
+                        log_scan_operation(f"Skipping inaccessible file: {file_path}", "warning", event="FILE_ACCESS_ERROR")
+                        continue
+                    
+                    # Process O*NET PDF to get new filename
+                    success, new_filename = process_onet_pdf(file_path)
+                    if not success:
+                        log_scan_operation(f"Error processing O*NET PDF {file_path}: {new_filename}", "error", event="FILE_PROCESSING_ERROR")
+                        continue
+                        
+                    valid_files.append((file_path, new_filename))
+                    
+                except Exception as file_error:
+                    log_scan_operation(f"Error validating file {file_path}: {str(file_error)}", "error", event="FILE_PROCESSING_ERROR")
+                    continue
+            
+            # Only create destination directory if we have valid files to process
+            if valid_files:
+                dest_dir = os.path.join(settings.MEDIA_ROOT, 'pdfs', computer_label)
+                os.makedirs(dest_dir, exist_ok=True)
+                log_scan_operation(f"Created destination directory: {dest_dir}", event="DIRECTORY_CREATED")
+                
+                # Process valid files
+                processed_count = 0
+                for file_path, new_filename in valid_files:
+                    try:
+                        # Check for duplicates before copying
+                        if is_duplicate_onet(dest_dir, new_filename):
+                            log_scan_operation(f"Skipping duplicate O*NET file: {new_filename}", "info", event="DUPLICATE_FILE")
+                            continue
+                            
+                        # Create destination path with new filename
+                        dest_path = os.path.join(dest_dir, new_filename)
+                        
+                        # Copy file to destination with new name
+                        shutil.copy2(file_path, dest_path)
+                        log_scan_operation(f"Copied and renamed file: {os.path.basename(file_path)} -> {new_filename}", event="FILE_RENAMED")
+                        processed_count += 1
+                        
+                    except Exception as copy_error:
+                        log_scan_operation(f"Error copying file {file_path}: {str(copy_error)}", "error", event="FILE_PROCESSING_ERROR")
+                        continue
+                
+                log_scan_operation(f"Successfully processed {processed_count} files from {computer_label}", event="SCAN_SUCCESS")
+            else:
+                log_scan_operation(f"No valid files to process from {computer_label}", "warning", event="NO_VALID_FILES")
+            
+            success = True
+            
+        except Exception as e:
+            log_scan_operation(f"Error scanning {computer_label}: {str(e)}", "error", event="SCAN_ERROR")
+            success = False
+            
+        finally:
+            try:
+                # Always try to disconnect and log the result
+                self._disconnect_computer(computer)
+                log_scan_operation(f"Successfully disconnected from {computer_label}", event="DISCONNECT_SUCCESS")
+            except Exception as disconnect_error:
+                log_scan_operation(f"Error disconnecting from {computer_label}: {str(disconnect_error)}", "error", event="DISCONNECT_ERROR")
+                
+        return success
 
     def _scan_thread(self, computers):
         """Background thread for scanning."""
         try:
             total = len(computers)
-            self.logger.info(f"Starting scan thread for {total} computers")
+            self.logger.info(f"Starting scan thread for {total} computers", extra={'event': 'SCAN_START'})
             self._current_scan_stats = {
                 'processed_pdfs': 0,
-                'renamed_pdfs': 0,
                 'computers_scanned': 0,
                 'total_computers': total,
                 'start_time': timezone.now(),
@@ -1353,20 +1670,28 @@ class ScanViewSet(viewsets.ViewSet):
             
             for i, computer in enumerate(computers, 1):
                 if not self._scan_in_progress:
-                    self.logger.info("Scan cancelled")
+                    self.logger.info("Scan cancelled", extra={'event': 'SCAN_CANCELLED'})
                     break
                 
                 # Update progress before starting each computer
-                computer_label = str(computer.label)
-                self.logger.info(f"Starting scan for computer {computer_label} ({i} of {total})")
+                computer_label = getattr(computer, 'label', computer.ip_address)
+                self.logger.info(f"Starting scan for computer {computer_label} ({i} of {total})", extra={'event': 'COMPUTER_SCAN_START'})
                 self._current_scan_stats['per_computer_progress'][computer_label] = 0
                 
-                # Do the scan with retry logic
-                success = self._scan_single_computer(computer)
-                if success:
-                    self.logger.info(f"Successfully completed scan for {computer_label}")
-                else:
-                    self.logger.error(f"Failed to complete scan for {computer_label}")
+                try:
+                    # Do the scan with retry logic
+                    success = self._scan_single_computer(computer)
+                    if success:
+                        self.logger.info(f"Successfully completed scan for {computer_label}", extra={'event': 'COMPUTER_SCAN_SUCCESS'})
+                        self._current_scan_stats['computers_scanned'] += 1
+                        self._current_scan_stats['per_computer_progress'][computer_label] = 100
+                    else:
+                        self.logger.error(f"Failed to complete scan for {computer_label}", extra={'event': 'COMPUTER_SCAN_FAILURE'})
+                        self._current_scan_stats['failed_computers'].append(computer_label)
+                except Exception as e:
+                    self.logger.error(f"Error scanning {computer_label}: {str(e)}", extra={'event': 'COMPUTER_SCAN_ERROR'})
+                    self._current_scan_stats['failed_computers'].append(computer_label)
+                    continue
                 
                 # Update estimated completion time
                 if i > 1:
@@ -1374,131 +1699,14 @@ class ScanViewSet(viewsets.ViewSet):
                     avg_time_per_computer = elapsed / i
                     remaining_computers = total - i
                     estimated_remaining_seconds = avg_time_per_computer * remaining_computers
-                    self.logger.info(f"Estimated completion time: {estimated_remaining_seconds}")
+                    self.logger.info(f"Estimated completion time: {estimated_remaining_seconds}", extra={'event': 'ESTIMATED_COMPLETION_TIME'})
                     self._current_scan_stats['estimated_completion'] = estimated_remaining_seconds
 
-            self.logger.info("Scan thread completed")
+            self.logger.info(f"Scan thread completed. Successfully scanned {self._current_scan_stats['computers_scanned']} of {total} computers", extra={'event': 'SCAN_COMPLETE'})
 
         finally:
             self._scan_in_progress = False
-            self.logger.info("Marked scan as complete")
-
-    def _scan_single_computer(self, computer):
-        """Scan a single computer with retry logic."""
-        try:
-            retries = 0
-            max_retries = self.MAX_RETRIES
-            computer_label = str(computer.label)
-            
-            while retries < max_retries:
-                self.logger.info(f"Attempting scan of {computer_label} (attempt {retries + 1}/{max_retries})")
-                success, error = self._do_scan(computer)
-                if success:
-                    # Update progress
-                    self._current_scan_stats['computers_scanned'] += 1
-                    self._current_scan_stats['per_computer_progress'][computer_label] = 100
-                    return True
-                
-                retries += 1
-                if retries < max_retries:
-                    self.logger.info(f"Retrying scan for {computer_label} (attempt {retries + 1}/{max_retries})")
-                    time.sleep(2 ** retries)  # Exponential backoff
-                
-            # If we get here, all retries failed
-            self._current_scan_stats['failed_computers'].append({
-                'computer': computer_label,
-                'error': error
-            })
-            self.logger.error(f"All retry attempts failed for {computer_label}. Last error: {error}")
-            return False
-            
-        except Exception as e:
-            self.logger.error(f"Unexpected error scanning {computer_label}: {str(e)}", exc_info=True)
-            return False
-
-    def _do_scan(self, computer):
-        """Perform scan for a single computer"""
-        try:
-            # Get computer object if string is passed
-            if isinstance(computer, str):
-                self.logger.info(f"Looking up computer object for label: {computer}")
-                computer_obj = Computer.objects.filter(label=computer).first()
-                if not computer_obj:
-                    self.logger.error(f"Computer {computer} not found in database")
-                    return False, f"Computer {computer} not found"
-                computer = computer_obj
-
-            self.logger.info(f"Initiating scan for computer {computer.label} (IP: {computer.ip_address})")
-            
-            # Establish network connection
-            self.logger.info(f"Attempting to connect to {computer.label} at {computer.ip_address}")
-            if not self._connect_to_computer(computer):
-                self.logger.error(f"Failed to establish network connection to {computer.label}")
-                return False, "Failed to connect to computer"
-            self.logger.info(f"Successfully connected to {computer.label}")
-
-            try:
-                # Find PDFs using scan_network_directory
-                self.logger.info(f"Searching for PDF files on {computer.label}")
-                pdf_files = scan_network_directory(computer.ip_address)
-                if not pdf_files:
-                    self.logger.info(f"No PDF files found on {computer.label}")
-                    return True, "No PDF files found"
-                self.logger.info(f"Found {len(pdf_files)} PDF files on {computer.label}")
-
-                # Only create directory if we found PDF files
-                base_dir = settings.DESTINATION_ROOT
-                computer_dir = os.path.join(base_dir, computer.label)
-                self.logger.info(f"Creating destination directory for found PDFs: {computer_dir}")
-                os.makedirs(computer_dir, exist_ok=True)
-
-                # Process PDFs with computer-specific directory
-                self.logger.info(f"Starting to process {len(pdf_files)} PDFs for {computer.label}")
-                processed = 0
-                renamed = 0
-
-                for src_path in pdf_files:
-                    try:
-                        # Process the PDF file
-                        success, result = process_onet_pdf(src_path)
-                        if success:
-                            # Copy file to destination with new name
-                            dst_path = os.path.join(computer_dir, result)
-                            copy_network_file(src_path, dst_path)
-                            processed += 1
-                            renamed += 1
-                            self._current_scan_stats['processed_pdfs'] += 1
-                            self._current_scan_stats['renamed_pdfs'] += 1
-                            self.logger.info(f"Successfully processed and renamed: {result}")
-                        else:
-                            # Copy file without renaming if it's not an O*NET PDF
-                            dst_path = os.path.join(computer_dir, os.path.basename(src_path))
-                            copy_network_file(src_path, dst_path)
-                            processed += 1
-                            self._current_scan_stats['processed_pdfs'] += 1
-                            self.logger.info(f"Copied without renaming: {os.path.basename(src_path)}")
-                            
-                    except Exception as e:
-                        self.logger.error(f"Error processing {src_path}: {str(e)}")
-                        continue
-
-                self.logger.info(f"Finished processing PDFs for {computer.label}. Processed: {processed}, Renamed: {renamed}")
-                
-            finally:
-                self._disconnect_computer(computer)  # Clean up connection
-                
-            return True, f"Successfully processed {processed} PDFs, renamed {renamed}"
-            
-        except Exception as e:
-            error_msg = f"Error scanning {computer.label}: {str(e)}"
-            computer_label = computer.label if hasattr(computer, 'label') else str(computer)
-            self.logger.error(error_msg, exc_info=True)
-            self._disconnect_computer(computer)  # Clean up connection even on error
-            return False, error_msg
-            
-    def _connect_to_computer(self, computer):
-        """Establish network connection to computer"""
-        return establish_network_connection(computer.ip_address)
+            self.logger.info("Marked scan as complete", extra={'event': 'SCAN_COMPLETE'})
 
     @action(detail=False, methods=['get', 'post', 'put', 'delete'])
     def schedule(self, request):
@@ -1557,7 +1765,7 @@ class ScanViewSet(viewsets.ViewSet):
 
         if self._scan_in_progress:
             return Response({"error": "Scan already in progress"}, status=400)
-            
+
         # Get the computers for this schedule
         computers = list(schedule.computers.all())
         
@@ -1567,7 +1775,6 @@ class ScanViewSet(viewsets.ViewSet):
         self._scan_in_progress = True
         self._current_scan_stats = {
             'processed_pdfs': 0,
-            'renamed_pdfs': 0,
             'computers_scanned': 0,
             'total_computers': len(computers),
             'start_time': timezone.now(),
@@ -1590,7 +1797,7 @@ class ScanViewSet(viewsets.ViewSet):
             
         except Exception as e:
             self._scan_in_progress = False
-            logger.error(f"Failed to start scan: {str(e)}")
+            logger.error(f"Failed to start scan: {str(e)}", extra={'event': 'SCAN_START_ERROR'})
             return Response(
                 {'error': f'Failed to start scan: {str(e)}'},
                 status=500
@@ -1903,46 +2110,6 @@ class NotificationViewSet(BaseViewSet,
         notification.archived = False
         notification.save()
         return Response({'status': 'success'})
-
-class RunNowView(BaseViewSet,
-                mixins.CreateModelMixin,
-                viewsets.GenericViewSet):
-    serializer_class = FileTransferSerializer
-
-    def get_queryset(self):
-        return FileTransfer.objects.none()
-
-    def create(self, request):
-        """Run file operations immediately."""
-        try:
-            # Run file operations synchronously
-            log_scan_operation("Starting manual file operations")
-            computers = Computer.objects.filter(is_online=True)
-            
-            for computer in computers:
-                try:
-                    # Get the PDF storage directory from Django settings
-                    pdf_dir = os.path.join(settings.DESTINATION_ROOT, computer.label)
-                    os.makedirs(pdf_dir, exist_ok=True)
-                    
-                    remote_pdfs = scan_network_directory(computer.ip_address)
-                    for src_path in remote_pdfs:
-                        dst_path = os.path.join(pdf_dir, os.path.basename(src_path))
-                        copy_network_file(src_path, dst_path)
-                    
-                except Exception as e:
-                    log_scan_operation(f"Error processing computer {computer.label}: {str(e)}", "error")
-                    
-            log_scan_operation("Manual file operations completed")
-            return Response({'status': 'success'})
-            
-        except Exception as e:
-            error_msg = f"Error running file operations: {str(e)}"
-            log_scan_operation(error_msg, "error")
-            return Response(
-                {'error': error_msg},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
 
 class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
     """ViewSet for viewing audit logs."""
@@ -2313,7 +2480,6 @@ class ScanScheduleViewSet(viewsets.ModelViewSet):
         scan_viewset._scan_in_progress = True
         scan_viewset._current_scan_stats = {
             'processed_pdfs': 0,
-            'renamed_pdfs': 0,
             'computers_scanned': 0,
             'total_computers': len(computers),
             'start_time': timezone.now(),
@@ -2328,6 +2494,7 @@ class ScanScheduleViewSet(viewsets.ModelViewSet):
             thread = threading.Thread(target=scan_viewset._scan_thread, args=(computers,))
             thread.daemon = True
             thread.start()
+            self.logger.info(f"Started scan thread for {len(computers)} computers")
 
             return Response({
                 'status': 'Scan started successfully',
@@ -2336,7 +2503,7 @@ class ScanScheduleViewSet(viewsets.ModelViewSet):
             
         except Exception as e:
             scan_viewset._scan_in_progress = False
-            logger.error(f"Failed to start scan: {str(e)}")
+            logger.error(f"Failed to start scan: {str(e)}", extra={'event': 'SCAN_START_ERROR'})
             return Response(
                 {'error': f'Failed to start scan: {str(e)}'},
                 status=500
