@@ -574,15 +574,18 @@ def process_onet_pdf(file_path, current_date=None):
         for page in reader.pages:
             content += page.extract_text()
 
-        # Skip if this is specifically a Job Zones document
+        # Skip if this is specifically a Job Zones or Score Report document
         content_lines = content.splitlines()
         
-        # Check if "Job Zones" appears as a main heading (by itself on a line)
-        # We look at the first few lines where headings typically appear
+        # Check for specific document types in the first few lines
         for line in content_lines[:10]:
-            if line.strip().lower() == 'job zones':
+            line = line.strip().lower()
+            if line == 'job zones':
                 logger.info(f"Skipping Job Zones document: {file_path}", extra={'event': 'PROCESS_ONET_PDF'})
                 return False, "Job Zones document - not processing"
+            elif line == 'score report':
+                logger.info(f"Skipping Score Report document: {file_path}", extra={'event': 'PROCESS_ONET_PDF'})
+                return False, "Score Report document - not processing"
 
         # Now extract name from the content
         name = extract_name_from_onet(content)
