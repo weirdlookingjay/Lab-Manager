@@ -2,7 +2,7 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import make_password
-from .models import Computer, FileTransfer, AuditLog, Notification, Schedule, Tag, SystemLog, LogAggregation, LogPattern, LogAlert, LogCorrelation, ScanSchedule
+from .models import Computer, FileTransfer, AuditLog, Notification, Schedule, Tag, SystemLog, LogAggregation, LogPattern, LogAlert, LogCorrelation, ScanSchedule, DocumentTag
 
 User = get_user_model()
 
@@ -70,7 +70,14 @@ class ScheduleSerializer(serializers.ModelSerializer):
 class TagSerializer(serializers.ModelSerializer):
     class Meta:
         model = Tag
-        fields = ['id', 'name', 'created_at']
+        fields = ['id', 'name', 'color']
+
+class DocumentTagSerializer(serializers.ModelSerializer):
+    tag = TagSerializer(read_only=True)
+    
+    class Meta:
+        model = DocumentTag
+        fields = ['id', 'document_path', 'computer', 'tag']
 
 class SystemLogSerializer(serializers.ModelSerializer):
     user = UserSerializer(read_only=True)

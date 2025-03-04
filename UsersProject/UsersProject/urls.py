@@ -5,16 +5,13 @@ from django.conf import settings
 from django.conf.urls.static import static
 
 from user_management.views import ScanScheduleViewSet
-
-
 from user_management.views_scan import ScanViewSet
 from user_management.views_notification import NotificationViewSet
 from user_management.views_document import DocumentViewSet
 from user_management.views_computer import ComputerViewSet
+from user_management.views_document_tags import DocumentTagViewSet
 
 from rest_framework.routers import DefaultRouter
-
-
 
 # Create a router for API endpoints
 router = DefaultRouter()
@@ -23,13 +20,7 @@ router.register(r'documents', DocumentViewSet, basename='document')
 router.register(r'notifications', NotificationViewSet, basename='notification')
 router.register(r'scan-schedules', ScanScheduleViewSet, basename='scan-schedule')
 router.register(r'scan', ScanViewSet, basename='scan')
-
-print("DEBUG - Main router URLs:", router.urls)
-
-# Debug prints
-print("\nDEBUG - Router URLs:")
-for url in router.urls:
-    print(f"  {url.pattern}")
+router.register(r'documents/tags', DocumentTagViewSet, basename='document-tags')
 
 urlpatterns = [
     path('admin/', admin.site.urls),

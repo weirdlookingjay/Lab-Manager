@@ -215,7 +215,7 @@ class Notification(models.Model):
 
 class Tag(models.Model):
     name = models.CharField(max_length=100, unique=True)
-    color = models.CharField(max_length=7, default='#3B82F6')  # Default color is blue
+    color = models.CharField(max_length=7, default='#3B82F6')  # Default blue color
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

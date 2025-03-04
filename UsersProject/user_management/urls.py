@@ -1,34 +1,34 @@
 # user_management/urls.py
-from django.urls import path, include
+from django.urls import path, include, re_path
 from rest_framework.routers import DefaultRouter
 
+from .views import (    
+    AuditLogViewSet,
+    LogAggregationViewSet, LogPatternViewSet,
+    LogAlertViewSet, LogCorrelationViewSet,
+    ScanScheduleViewSet
+)
 
-from .views_user import UserViewSet
-from .views_computer import ComputerViewSet
-from .views_document import DocumentViewSet
-from .views_tag import TagViewSet
-from .views_notification import NotificationViewSet
-from .views import AuditLogViewSet, ChangePasswordView, LogViewSet, LogAggregationViewSet, LogPatternViewSet, LogAlertViewSet,LogCorrelationViewSet, LoginView, RegisterView, ScanScheduleViewSet, admin_stats
-from .views_scan import ScanViewSet
+from user_management.views_user import UserViewSet
+from user_management.views_computer import ComputerViewSet
+from user_management.views_document import DocumentViewSet
+from user_management.views_tag import TagViewSet
+from user_management.views_notification import NotificationViewSet
+from user_management.views_scan import ScanViewSet
+from user_management.views_schedule import ScheduleViewSet
+from user_management.views_system_log import SystemLogViewSet
+from user_management.views_auth import LoginView, LogoutView
 
-
-
-
-# Create a router and register our viewsets with it
+# Create a router for our viewsets
 router = DefaultRouter()
 router.register(r'users', UserViewSet, basename='user')
-router.register(r'computers', ComputerViewSet, basename='computer')
-router.register(r'documents', DocumentViewSet, basename='document')
-router.register(r'tags', TagViewSet, basename='tag')
-router.register(r'notifications', NotificationViewSet, basename='notification')
 router.register(r'audit-logs', AuditLogViewSet, basename='audit-log')
-router.register(r'logs', LogViewSet, basename='logs')
+router.register(r'schedules', ScheduleViewSet, basename='schedule')
+router.register(r'system-logs', SystemLogViewSet, basename='system-log')
 router.register(r'log-aggregations', LogAggregationViewSet, basename='log-aggregation')
-router.register(r'log-patterns', LogPatternViewSet, basename='log-patterns')
-router.register(r'log-alerts', LogAlertViewSet, basename='log-alerts')
-router.register(r'log-correlations', LogCorrelationViewSet, basename='log-correlations')
-router.register(r'scan', ScanViewSet, basename='scan')
-router.register(r'scan-schedules', ScanScheduleViewSet, basename='scan-schedule')
+router.register(r'log-patterns', LogPatternViewSet, basename='log-pattern')
+router.register(r'log-alerts', LogAlertViewSet, basename='log-alert')
+router.register(r'log-correlations', LogCorrelationViewSet, basename='log-correlation')
 
 # The API URLs are now determined automatically by the router
 urlpatterns = [
@@ -37,11 +37,5 @@ urlpatterns = [
     
     # Auth URLs
     path('login/', LoginView.as_view(), name='login'),
-    path('logout/', LoginView.as_view(), name='logout'),
-    path('change-password/', ChangePasswordView.as_view(), name='change-password'),
-    
-    # Admin URLs
-    path('admin/stats/', admin_stats, name='admin-stats'),
-    path('admin/users/', UserViewSet.as_view({'get': 'list'}), name='user_list'),
-    path('admin/create-user/', RegisterView.as_view({'get': 'list', 'post': 'create'}), name='create_user'),
+    path('logout/', LogoutView.as_view(), name='logout'),
 ]

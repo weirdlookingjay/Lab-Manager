@@ -116,6 +116,7 @@ INSTALLED_APPS = [
     'channels',  # Add channels for WebSocket support
     'notifications',  # Add our new notifications app
     'tickets',  # Add the tickets app
+    'django_extensions',
 ]
 
 # Middleware - order is important!
