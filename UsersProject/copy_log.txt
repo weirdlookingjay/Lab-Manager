@@ -13867,3 +13867,177 @@ DETAIL:  Failing row contains (3692, 2025-02-26 14:26:00.530166+00, ERROR, FILE_
 [2025-03-04 11:06:17] Successfully copied file to: D:\Code\aw\labv2\UsersProject\media\pdfs\PC5\O_NET_Interest_Profiler_Victor_Sanchez_03042025.pdf
 [2025-03-04 11:06:18] Successfully processed 8 files from PC5
 [2025-03-04 11:06:18] Successfully disconnected from PC5
+[2025-03-04 12:44:01] Starting scan for computer PC5
+[2025-03-04 12:44:02] Listing current network connections
+[2025-03-04 12:44:02] Disconnecting from M:
+[2025-03-04 12:44:02] Disconnecting from N:
+[2025-03-04 12:44:03] Disconnecting from P:
+[2025-03-04 12:44:03] Successfully connected to \\192.168.72.15\C$ with admin credentials
+[2025-03-04 12:44:03] Searching for PDF files on PC5
+[2025-03-04 12:44:03] Scanning network path: \\192.168.72.15\C$\Users (PC5)
+[2025-03-04 12:44:06] Found 32 PDF files in user folders
+[2025-03-04 12:44:12] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Desktop\O_NET Interest Profiler_ Job Zones at My Next Move jessineah sawyer.pdf: None
+[2025-03-04 12:44:13] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Desktop\O_NET_Interest_Profiler_Danielar_Osario_02282025.pdf: None
+[2025-03-04 12:44:16] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Desktop\StrengthsProfile-crystal-hidalgo.pdf: None
+[2025-03-04 12:44:16] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Desktop\VIA Character Strengths Survey Free Results _ VIA Institute on Character jessineahsawyer.pdf: None
+[2025-03-04 12:44:16] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Desktop\WESTERN GOVERNORS UNIVERSITY_enrollment_certificate josephcoste.pdf: None
+[2025-03-04 12:44:16] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\Interest RD.pdf: None
+[2025-03-04 12:44:16] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\StrengthsProfile-Aaliyah-Washington.pdf: None
+[2025-03-04 12:44:16] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\StrengthsProfile-Arianna-Brito.pdf: None
+[2025-03-04 12:44:16] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\StrengthsProfile-Brayant-Rodriguez (1).pdf: None
+[2025-03-04 12:44:16] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\StrengthsProfile-Brayant-Rodriguez.pdf: None
+[2025-03-04 12:44:16] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\StrengthsProfile-daniela-rosario.pdf: None
+[2025-03-04 12:44:16] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\StrengthsProfile-deijamin-aragones (1).pdf: None
+[2025-03-04 12:44:16] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\StrengthsProfile-EVELYN-TORRES.pdf: None
+[2025-03-04 12:44:16] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\StrengthsProfile-Ivan-Ramos.pdf: None
+[2025-03-04 12:44:17] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\StrengthsProfile-jaiky-guity.pdf: None
+[2025-03-04 12:44:17] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\StrengthsProfile-Lena-Zayas.pdf: None
+[2025-03-04 12:44:17] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\StrengthsProfile-maria-guzman.pdf: None
+[2025-03-04 12:44:17] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\StrengthsProfile-Rokhaya-Diop.pdf: None
+[2025-03-04 12:44:17] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\StrengthsProfile-victor-sanchez.pdf: None
+[2025-03-04 12:44:17] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\StrengthsProfile-WILLIAM-PADUA.pdf: None
+[2025-03-04 12:44:17] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\StrengthsProfile_Bianca-Alvarez-02-04-2025.pdf: None
+[2025-03-04 12:44:17] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\StrengthsProfile_Diamond-Hamilton-02-04-2025.pdf: None
+[2025-03-04 12:44:17] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\WESTERN GOVERNORS UNIVERSITY_enrollment_certificate.pdf: None
+[2025-03-04 12:44:17] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\WGU_Transcript.pdf: None
+[2025-03-04 12:44:17] Created destination directory for PC5: D:\Code\aw\labv2\UsersProject\media\pdfs\PC5
+[2025-03-04 12:44:17] Checking for O*NET duplicates with pattern: O_NET_Interest_Profiler_O_NET_Interest_Profiler_Ivan_Ramos_03042025pdf_03042025.pdf
+[2025-03-04 12:44:18] No duplicate O*NET found for O_NET_Interest_Profiler_Ivan_Ramos_03042025pdf
+[2025-03-04 12:44:18] Successfully copied file to: D:\Code\aw\labv2\UsersProject\media\pdfs\PC5\O_NET_Interest_Profiler_Ivan_Ramos_03042025.pdf
+[2025-03-04 12:44:18] Checking for O*NET duplicates with pattern: O_NET_Interest_Profiler_O_NET_Interest_Profiler_Crystal_Hidalgo_03042025pdf_03042025.pdf
+[2025-03-04 12:44:19] No duplicate O*NET found for O_NET_Interest_Profiler_Crystal_Hidalgo_03042025pdf
+[2025-03-04 12:44:19] Successfully copied file to: D:\Code\aw\labv2\UsersProject\media\pdfs\PC5\O_NET_Interest_Profiler_Crystal_Hidalgo_03042025.pdf
+[2025-03-04 12:44:19] Checking for O*NET duplicates with pattern: O_NET_Interest_Profiler_O_NET_Interest_Profiler_Deijamin_Aragones_03042025pdf_03042025.pdf
+[2025-03-04 12:44:20] No duplicate O*NET found for O_NET_Interest_Profiler_Deijamin_Aragones_03042025pdf
+[2025-03-04 12:44:21] Successfully copied file to: D:\Code\aw\labv2\UsersProject\media\pdfs\PC5\O_NET_Interest_Profiler_Deijamin_Aragones_03042025.pdf
+[2025-03-04 12:44:21] Checking for O*NET duplicates with pattern: O_NET_Interest_Profiler_O_NET_Interest_Profiler_Jaiky_Guity_03042025pdf_03042025.pdf
+[2025-03-04 12:44:21] No duplicate O*NET found for O_NET_Interest_Profiler_Jaiky_Guity_03042025pdf
+[2025-03-04 12:44:21] Successfully copied file to: D:\Code\aw\labv2\UsersProject\media\pdfs\PC5\O_NET_Interest_Profiler_Jaiky_Guity_03042025.pdf
+[2025-03-04 12:44:22] Checking for O*NET duplicates with pattern: O_NET_Interest_Profiler_O_NET_Interest_Profiler_Janet_Pizarro_03042025pdf_03042025.pdf
+[2025-03-04 12:44:22] No duplicate O*NET found for O_NET_Interest_Profiler_Janet_Pizarro_03042025pdf
+[2025-03-04 12:44:23] Successfully copied file to: D:\Code\aw\labv2\UsersProject\media\pdfs\PC5\O_NET_Interest_Profiler_Janet_Pizarro_03042025.pdf
+[2025-03-04 12:44:23] Checking for O*NET duplicates with pattern: O_NET_Interest_Profiler_O_NET_Interest_Profiler_Lena_Zayas_03042025pdf_03042025.pdf
+[2025-03-04 12:44:24] No duplicate O*NET found for O_NET_Interest_Profiler_Lena_Zayas_03042025pdf
+[2025-03-04 12:44:24] Successfully copied file to: D:\Code\aw\labv2\UsersProject\media\pdfs\PC5\O_NET_Interest_Profiler_Lena_Zayas_03042025.pdf
+[2025-03-04 12:44:24] Checking for O*NET duplicates with pattern: O_NET_Interest_Profiler_O_NET_Interest_Profiler_Penelope_Harris_03042025pdf_03042025.pdf
+[2025-03-04 12:44:25] No duplicate O*NET found for O_NET_Interest_Profiler_Penelope_Harris_03042025pdf
+[2025-03-04 12:44:25] Successfully copied file to: D:\Code\aw\labv2\UsersProject\media\pdfs\PC5\O_NET_Interest_Profiler_Penelope_Harris_03042025.pdf
+[2025-03-04 12:44:25] Checking for O*NET duplicates with pattern: O_NET_Interest_Profiler_O_NET_Interest_Profiler_Victor_Sanchez_03042025pdf_03042025.pdf
+[2025-03-04 12:44:27] No duplicate O*NET found for O_NET_Interest_Profiler_Victor_Sanchez_03042025pdf
+[2025-03-04 12:44:27] Successfully copied file to: D:\Code\aw\labv2\UsersProject\media\pdfs\PC5\O_NET_Interest_Profiler_Victor_Sanchez_03042025.pdf
+[2025-03-04 12:44:27] Successfully processed 8 files from PC5
+[2025-03-04 12:44:27] Successfully disconnected from PC5
+[2025-03-04 12:50:00] Starting scan for computer PC5
+[2025-03-04 12:50:00] Listing current network connections
+[2025-03-04 12:50:00] Successfully connected to \\192.168.72.15\C$ with admin credentials
+[2025-03-04 12:50:00] Searching for PDF files on PC5
+[2025-03-04 12:50:00] Scanning network path: \\192.168.72.15\C$\Users (PC5)
+[2025-03-04 12:50:01] Found 32 PDF files in user folders
+[2025-03-04 12:50:02] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Desktop\O_NET Interest Profiler_ Job Zones at My Next Move jessineah sawyer.pdf: None
+[2025-03-04 12:50:02] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Desktop\O_NET_Interest_Profiler_Danielar_Osario_02282025.pdf: None
+[2025-03-04 12:50:04] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Desktop\StrengthsProfile-crystal-hidalgo.pdf: None
+[2025-03-04 12:50:04] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Desktop\VIA Character Strengths Survey Free Results _ VIA Institute on Character jessineahsawyer.pdf: None
+[2025-03-04 12:50:04] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Desktop\WESTERN GOVERNORS UNIVERSITY_enrollment_certificate josephcoste.pdf: None
+[2025-03-04 12:50:04] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\Interest RD.pdf: None
+[2025-03-04 12:50:04] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\StrengthsProfile-Aaliyah-Washington.pdf: None
+[2025-03-04 12:50:04] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\StrengthsProfile-Arianna-Brito.pdf: None
+[2025-03-04 12:50:04] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\StrengthsProfile-Brayant-Rodriguez (1).pdf: None
+[2025-03-04 12:50:04] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\StrengthsProfile-Brayant-Rodriguez.pdf: None
+[2025-03-04 12:50:04] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\StrengthsProfile-daniela-rosario.pdf: None
+[2025-03-04 12:50:04] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\StrengthsProfile-deijamin-aragones (1).pdf: None
+[2025-03-04 12:50:05] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\StrengthsProfile-EVELYN-TORRES.pdf: None
+[2025-03-04 12:50:05] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\StrengthsProfile-Ivan-Ramos.pdf: None
+[2025-03-04 12:50:05] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\StrengthsProfile-jaiky-guity.pdf: None
+[2025-03-04 12:50:05] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\StrengthsProfile-Lena-Zayas.pdf: None
+[2025-03-04 12:50:05] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\StrengthsProfile-maria-guzman.pdf: None
+[2025-03-04 12:50:05] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\StrengthsProfile-Rokhaya-Diop.pdf: None
+[2025-03-04 12:50:05] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\StrengthsProfile-victor-sanchez.pdf: None
+[2025-03-04 12:50:05] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\StrengthsProfile-WILLIAM-PADUA.pdf: None
+[2025-03-04 12:50:05] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\StrengthsProfile_Bianca-Alvarez-02-04-2025.pdf: None
+[2025-03-04 12:50:05] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\StrengthsProfile_Diamond-Hamilton-02-04-2025.pdf: None
+[2025-03-04 12:50:05] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\WESTERN GOVERNORS UNIVERSITY_enrollment_certificate.pdf: None
+[2025-03-04 12:50:05] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\WGU_Transcript.pdf: None
+[2025-03-04 12:50:05] Created destination directory for PC5: D:\Code\aw\labv2\UsersProject\media\pdfs\PC5
+[2025-03-04 12:50:05] Checking for O*NET duplicates with pattern: O_NET_Interest_Profiler_O_NET_Interest_Profiler_Ivan_Ramos_03042025pdf_03042025.pdf
+[2025-03-04 12:50:06] No duplicate O*NET found for O_NET_Interest_Profiler_Ivan_Ramos_03042025pdf
+[2025-03-04 12:50:06] Successfully copied file to: D:\Code\aw\labv2\UsersProject\media\pdfs\PC5\O_NET_Interest_Profiler_Ivan_Ramos_03042025.pdf
+[2025-03-04 12:50:06] Checking for O*NET duplicates with pattern: O_NET_Interest_Profiler_O_NET_Interest_Profiler_Crystal_Hidalgo_03042025pdf_03042025.pdf
+[2025-03-04 12:50:07] No duplicate O*NET found for O_NET_Interest_Profiler_Crystal_Hidalgo_03042025pdf
+[2025-03-04 12:50:07] Successfully copied file to: D:\Code\aw\labv2\UsersProject\media\pdfs\PC5\O_NET_Interest_Profiler_Crystal_Hidalgo_03042025.pdf
+[2025-03-04 12:50:07] Checking for O*NET duplicates with pattern: O_NET_Interest_Profiler_O_NET_Interest_Profiler_Deijamin_Aragones_03042025pdf_03042025.pdf
+[2025-03-04 12:50:08] No duplicate O*NET found for O_NET_Interest_Profiler_Deijamin_Aragones_03042025pdf
+[2025-03-04 12:50:08] Successfully copied file to: D:\Code\aw\labv2\UsersProject\media\pdfs\PC5\O_NET_Interest_Profiler_Deijamin_Aragones_03042025.pdf
+[2025-03-04 12:50:08] Checking for O*NET duplicates with pattern: O_NET_Interest_Profiler_O_NET_Interest_Profiler_Jaiky_Guity_03042025pdf_03042025.pdf
+[2025-03-04 12:50:09] No duplicate O*NET found for O_NET_Interest_Profiler_Jaiky_Guity_03042025pdf
+[2025-03-04 12:50:09] Successfully copied file to: D:\Code\aw\labv2\UsersProject\media\pdfs\PC5\O_NET_Interest_Profiler_Jaiky_Guity_03042025.pdf
+[2025-03-04 12:50:09] Checking for O*NET duplicates with pattern: O_NET_Interest_Profiler_O_NET_Interest_Profiler_Janet_Pizarro_03042025pdf_03042025.pdf
+[2025-03-04 12:50:10] No duplicate O*NET found for O_NET_Interest_Profiler_Janet_Pizarro_03042025pdf
+[2025-03-04 12:50:10] Successfully copied file to: D:\Code\aw\labv2\UsersProject\media\pdfs\PC5\O_NET_Interest_Profiler_Janet_Pizarro_03042025.pdf
+[2025-03-04 12:50:10] Checking for O*NET duplicates with pattern: O_NET_Interest_Profiler_O_NET_Interest_Profiler_Lena_Zayas_03042025pdf_03042025.pdf
+[2025-03-04 12:50:11] No duplicate O*NET found for O_NET_Interest_Profiler_Lena_Zayas_03042025pdf
+[2025-03-04 12:50:11] Successfully copied file to: D:\Code\aw\labv2\UsersProject\media\pdfs\PC5\O_NET_Interest_Profiler_Lena_Zayas_03042025.pdf
+[2025-03-04 12:50:11] Checking for O*NET duplicates with pattern: O_NET_Interest_Profiler_O_NET_Interest_Profiler_Penelope_Harris_03042025pdf_03042025.pdf
+[2025-03-04 12:50:12] No duplicate O*NET found for O_NET_Interest_Profiler_Penelope_Harris_03042025pdf
+[2025-03-04 12:50:12] Successfully copied file to: D:\Code\aw\labv2\UsersProject\media\pdfs\PC5\O_NET_Interest_Profiler_Penelope_Harris_03042025.pdf
+[2025-03-04 12:50:12] Checking for O*NET duplicates with pattern: O_NET_Interest_Profiler_O_NET_Interest_Profiler_Victor_Sanchez_03042025pdf_03042025.pdf
+[2025-03-04 12:50:13] No duplicate O*NET found for O_NET_Interest_Profiler_Victor_Sanchez_03042025pdf
+[2025-03-04 12:50:13] Successfully copied file to: D:\Code\aw\labv2\UsersProject\media\pdfs\PC5\O_NET_Interest_Profiler_Victor_Sanchez_03042025.pdf
+[2025-03-04 12:50:13] Successfully processed 8 files from PC5
+[2025-03-04 12:50:13] Successfully disconnected from PC5
+[2025-03-04 13:02:00] Starting scan for computer PC5
+[2025-03-04 13:02:00] Listing current network connections
+[2025-03-04 13:02:00] Successfully connected to \\192.168.72.15\C$ with admin credentials
+[2025-03-04 13:02:00] Searching for PDF files on PC5
+[2025-03-04 13:02:00] Scanning network path: \\192.168.72.15\C$\Users (PC5)
+[2025-03-04 13:02:01] Found 32 PDF files in user folders
+[2025-03-04 13:02:01] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Desktop\O_NET Interest Profiler_ Job Zones at My Next Move jessineah sawyer.pdf: None
+[2025-03-04 13:02:02] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Desktop\O_NET_Interest_Profiler_Danielar_Osario_02282025.pdf: None
+[2025-03-04 13:02:04] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Desktop\StrengthsProfile-crystal-hidalgo.pdf: None
+[2025-03-04 13:02:04] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Desktop\VIA Character Strengths Survey Free Results _ VIA Institute on Character jessineahsawyer.pdf: None
+[2025-03-04 13:02:04] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Desktop\WESTERN GOVERNORS UNIVERSITY_enrollment_certificate josephcoste.pdf: None
+[2025-03-04 13:02:04] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\Interest RD.pdf: None
+[2025-03-04 13:02:04] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\StrengthsProfile-Aaliyah-Washington.pdf: None
+[2025-03-04 13:02:04] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\StrengthsProfile-Arianna-Brito.pdf: None
+[2025-03-04 13:02:04] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\StrengthsProfile-Brayant-Rodriguez (1).pdf: None
+[2025-03-04 13:02:04] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\StrengthsProfile-Brayant-Rodriguez.pdf: None
+[2025-03-04 13:02:04] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\StrengthsProfile-daniela-rosario.pdf: None
+[2025-03-04 13:02:04] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\StrengthsProfile-deijamin-aragones (1).pdf: None
+[2025-03-04 13:02:04] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\StrengthsProfile-EVELYN-TORRES.pdf: None
+[2025-03-04 13:02:04] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\StrengthsProfile-Ivan-Ramos.pdf: None
+[2025-03-04 13:02:04] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\StrengthsProfile-jaiky-guity.pdf: None
+[2025-03-04 13:02:04] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\StrengthsProfile-Lena-Zayas.pdf: None
+[2025-03-04 13:02:04] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\StrengthsProfile-maria-guzman.pdf: None
+[2025-03-04 13:02:04] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\StrengthsProfile-Rokhaya-Diop.pdf: None
+[2025-03-04 13:02:04] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\StrengthsProfile-victor-sanchez.pdf: None
+[2025-03-04 13:02:04] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\StrengthsProfile-WILLIAM-PADUA.pdf: None
+[2025-03-04 13:02:04] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\StrengthsProfile_Bianca-Alvarez-02-04-2025.pdf: None
+[2025-03-04 13:02:04] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\StrengthsProfile_Diamond-Hamilton-02-04-2025.pdf: None
+[2025-03-04 13:02:04] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\WESTERN GOVERNORS UNIVERSITY_enrollment_certificate.pdf: None
+[2025-03-04 13:02:05] Error processing O*NET PDF \\192.168.72.15\C$\Users\Client\Downloads\WGU_Transcript.pdf: None
+[2025-03-04 13:02:05] Created destination directory for PC5: D:\Code\aw\labv2\UsersProject\media\pdfs\PC5
+[2025-03-04 13:02:05] Checking for O*NET duplicates with pattern: O_NET_Interest_Profiler_O_NET_Interest_Profiler_Ivan_Ramos_03042025pdf_03042025.pdf
+[2025-03-04 13:02:05] No duplicate O*NET found for O_NET_Interest_Profiler_Ivan_Ramos_03042025pdf
+[2025-03-04 13:02:05] Successfully copied file to: D:\Code\aw\labv2\UsersProject\media\pdfs\PC5\O_NET_Interest_Profiler_Ivan_Ramos_03042025.pdf
+[2025-03-04 13:02:05] Checking for O*NET duplicates with pattern: O_NET_Interest_Profiler_O_NET_Interest_Profiler_Crystal_Hidalgo_03042025pdf_03042025.pdf
+[2025-03-04 13:02:06] No duplicate O*NET found for O_NET_Interest_Profiler_Crystal_Hidalgo_03042025pdf
+[2025-03-04 13:02:06] Successfully copied file to: D:\Code\aw\labv2\UsersProject\media\pdfs\PC5\O_NET_Interest_Profiler_Crystal_Hidalgo_03042025.pdf
+[2025-03-04 13:02:06] Checking for O*NET duplicates with pattern: O_NET_Interest_Profiler_O_NET_Interest_Profiler_Deijamin_Aragones_03042025pdf_03042025.pdf
+[2025-03-04 13:02:07] No duplicate O*NET found for O_NET_Interest_Profiler_Deijamin_Aragones_03042025pdf
+[2025-03-04 13:02:07] Successfully copied file to: D:\Code\aw\labv2\UsersProject\media\pdfs\PC5\O_NET_Interest_Profiler_Deijamin_Aragones_03042025.pdf
+[2025-03-04 13:02:07] Checking for O*NET duplicates with pattern: O_NET_Interest_Profiler_O_NET_Interest_Profiler_Jaiky_Guity_03042025pdf_03042025.pdf
+[2025-03-04 13:02:08] No duplicate O*NET found for O_NET_Interest_Profiler_Jaiky_Guity_03042025pdf
+[2025-03-04 13:02:08] Successfully copied file to: D:\Code\aw\labv2\UsersProject\media\pdfs\PC5\O_NET_Interest_Profiler_Jaiky_Guity_03042025.pdf
+[2025-03-04 13:02:08] Checking for O*NET duplicates with pattern: O_NET_Interest_Profiler_O_NET_Interest_Profiler_Janet_Pizarro_03042025pdf_03042025.pdf
+[2025-03-04 13:02:09] No duplicate O*NET found for O_NET_Interest_Profiler_Janet_Pizarro_03042025pdf
+[2025-03-04 13:02:09] Successfully copied file to: D:\Code\aw\labv2\UsersProject\media\pdfs\PC5\O_NET_Interest_Profiler_Janet_Pizarro_03042025.pdf
+[2025-03-04 13:02:09] Checking for O*NET duplicates with pattern: O_NET_Interest_Profiler_O_NET_Interest_Profiler_Lena_Zayas_03042025pdf_03042025.pdf
+[2025-03-04 13:02:10] No duplicate O*NET found for O_NET_Interest_Profiler_Lena_Zayas_03042025pdf
+[2025-03-04 13:02:10] Successfully copied file to: D:\Code\aw\labv2\UsersProject\media\pdfs\PC5\O_NET_Interest_Profiler_Lena_Zayas_03042025.pdf
+[2025-03-04 13:02:10] Checking for O*NET duplicates with pattern: O_NET_Interest_Profiler_O_NET_Interest_Profiler_Penelope_Harris_03042025pdf_03042025.pdf
+[2025-03-04 13:02:11] No duplicate O*NET found for O_NET_Interest_Profiler_Penelope_Harris_03042025pdf
+[2025-03-04 13:02:11] Successfully copied file to: D:\Code\aw\labv2\UsersProject\media\pdfs\PC5\O_NET_Interest_Profiler_Penelope_Harris_03042025.pdf
+[2025-03-04 13:02:11] Checking for O*NET duplicates with pattern: O_NET_Interest_Profiler_O_NET_Interest_Profiler_Victor_Sanchez_03042025pdf_03042025.pdf
+[2025-03-04 13:02:13] No duplicate O*NET found for O_NET_Interest_Profiler_Victor_Sanchez_03042025pdf
+[2025-03-04 13:02:13] Successfully copied file to: D:\Code\aw\labv2\UsersProject\media\pdfs\PC5\O_NET_Interest_Profiler_Victor_Sanchez_03042025.pdf
+[2025-03-04 13:02:13] Successfully processed 8 files from PC5
+[2025-03-04 13:02:13] Successfully disconnected from PC5

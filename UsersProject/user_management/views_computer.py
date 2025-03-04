@@ -1,3 +1,5 @@
+import os
+from django.conf import settings
 from rest_framework import viewsets, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.authentication import TokenAuthentication, SessionAuthentication
@@ -11,7 +13,6 @@ from .models import (
 )
 
 from .serializers import ComputerSerializer
-
 
 class ComputerViewSet(viewsets.ModelViewSet):
     """ViewSet for managing computers"""

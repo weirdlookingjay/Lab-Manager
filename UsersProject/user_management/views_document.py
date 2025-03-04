@@ -1,13 +1,30 @@
+import os
+import logging
+import uuid
+from datetime import datetime
+
 from rest_framework import viewsets, status
 from rest_framework.permissions import AllowAny
 from rest_framework.authentication import TokenAuthentication, SessionAuthentication
 from rest_framework.decorators import action
+from rest_framework.response import Response
+from rest_framework import generics
+from django.conf import settings
 from .authentication import CookieTokenAuthentication
+from .models import DocumentTag
+from django.http import HttpResponse
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger('scan_operations')
 
 class DocumentViewSet(viewsets.ViewSet):
     """ViewSet for managing documents"""
     permission_classes = [AllowAny]
     authentication_classes = [CookieTokenAuthentication, TokenAuthentication, SessionAuthentication]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.logger = logger
 
     def list(self, request):
         """List all documents with advanced filtering and sorting."""
