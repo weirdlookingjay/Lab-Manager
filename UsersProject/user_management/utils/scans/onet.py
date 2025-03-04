@@ -17,6 +17,14 @@ skip_patterns = [
     'profile', 'report', 'results'
 ]
 
+# Common name particles that might be part of surnames
+name_particles = {
+    'ar', 'de', 'del', 'dela', 'della', 'der', 'di', 'du', 'el',
+    'la', 'le', 'san', 'santa', 'santo', 'st', 'ter', 'van', 'von',
+    'da', 'das', 'do', 'dos', 'das', 'de la', 'del', 'della', 'der',
+    'mac', 'mc', 'ben', 'ibn', 'al'
+}
+
 def validate_name(name):
     """Validate and clean a name extracted from O*NET PDF.
     
@@ -29,48 +37,65 @@ def validate_name(name):
     if not name:
         return None
         
-    # Clean and normalize the name
-    name = " ".join(name.split())  # Normalize whitespace
+    # Clean and normalize whitespace only
+    name = " ".join(name.split())
     
     # Basic validation rules
     if any(pattern in name.lower() for pattern in skip_patterns):
         return None
         
-    # Fix common OCR issues and handle name components
+    # Split into words
     words = name.split()
+    if not words:
+        return None
+        
+    # Process words and handle name particles
+    result_words = []
     i = 0
     while i < len(words):
-        curr_word = words[i]
-        next_word = words[i + 1] if i < len(words) - 1 else None
+        current_word = words[i].lower()
         
-        # If we have 3 or more words and current word is short (1-2 chars)
-        # and it's not the first word, it's likely part of the last name
-        if (len(words) >= 3 and i > 0 and len(curr_word) <= 2 and next_word 
-            and curr_word.isalpha() and next_word[0].isupper()):
-            # Combine current word with next word
-            words[i] = curr_word + next_word
-            words.pop(i + 1)
-            continue
+        # Handle cases where we have remaining words
+        if i < len(words) - 1:
+            next_word = words[i + 1].lower()
             
-        # If it's a single letter at the end, combine with previous word
-        if len(curr_word) == 1 and curr_word.isalpha() and i > 0 and not next_word:
-            words[i-1] = words[i-1] + curr_word
-            words.pop(i)
-            continue
-            
+            # Case 1: Current word is a name particle
+            if current_word in name_particles:
+                # Join particle with next word
+                combined = words[i] + words[i+1]
+                result_words.append(combined[0].upper() + combined[1:].lower())
+                i += 2
+                continue
+                
+            # Case 2: Next word is a single letter (likely part of surname)
+            if len(next_word) == 1:
+                # Join current word with the single letter
+                combined = words[i] + words[i+1]
+                result_words.append(combined[0].upper() + combined[1:].lower())
+                i += 2
+                continue
+                
+            # Case 3: Current word ends with 'r' or 'rr' and next word starts with 'o' (e.g. "pizarr o")
+            if (current_word.endswith('r') or current_word.endswith('rr')) and next_word.startswith('o'):
+                # Join the words
+                combined = words[i] + words[i+1]
+                result_words.append(combined[0].upper() + combined[1:].lower())
+                i += 2
+                continue
+                
+            # Case 4: Next word is a single letter followed by more words
+            if len(next_word) == 1 and i < len(words) - 2:
+                # Join all parts of the surname
+                combined = "".join(words[i:i+3])
+                result_words.append(combined[0].upper() + combined[1:].lower())
+                i += 3
+                continue
+        
+        # Regular word - capitalize first letter
+        result_words.append(words[i][0].upper() + words[i][1:].lower())
         i += 1
     
-    # Convert to proper case, preserving Spanish particles
-    for i, word in enumerate(words):
-        lower_word = word.lower()
-        # Handle Spanish name particles
-        if lower_word in ['de', 'la', 'del', 'las', 'los', 'y', 'e']:
-            words[i] = lower_word
-        else:
-            # Only capitalize first letter
-            words[i] = word[0].upper() + word[1:].lower()
-    
-    result = " ".join(words)
+    result = " ".join(result_words)
     
     # Final validation
     if not result or len(result.replace(" ", "")) < 2:
@@ -297,10 +322,10 @@ def normalize_name(name):
         return "Unknown_Name"
         
     try:
-        # Remove any extra whitespace and convert to title case
-        name = " ".join(name.split()).title()
+        # Remove any extra whitespace but preserve original spacing
+        name = " ".join(name.split())
         
-        # Replace spaces with underscores
+        # Replace spaces with underscores while preserving name components
         name = name.replace(" ", "_")
         
         # Remove any special characters except underscores
