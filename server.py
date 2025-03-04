@@ -193,7 +193,7 @@ def copy_files(computer_ip, computer_label):
             for folder in folders_to_copy:
                 source_folder = os.path.join(base_path, user, folder)
                 if not os.path.exists(source_folder):
-                    log_message(f"[{computer_ip}] Skipping {source_folder} (not found)")
+                    log_message(f"[{computer_label}] Skipping {source_folder} (not found)")
                     continue
 
                 try:
@@ -206,15 +206,15 @@ def copy_files(computer_ip, computer_label):
                             # First copy to temp directory
                             shutil.copy2(source_file, temp_file)
                             
-                            # Then store in web storage
+                            # Then store in web storage using the notifications.utils function
                             attachment = store_scanned_pdf(temp_file, computer_label)
                             if attachment:
-                                log_message(f"[{computer_ip}] Successfully stored {file} in web storage")
+                                log_message(f"[{computer_label}] Successfully stored {file} in web storage")
                             else:
-                                log_message(f"[{computer_ip}] Failed to store {file} in web storage")
+                                log_message(f"[{computer_label}] Failed to store {file} in web storage")
 
                 except Exception as e:
-                    log_message(f"[{computer_ip}] Error copying from {source_folder}: {str(e)}")
+                    log_message(f"[{computer_label}] Error copying from {source_folder}: {str(e)}")
     finally:
         # Clean up temp directory
         try:

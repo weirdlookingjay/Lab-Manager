@@ -3,14 +3,18 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
-from user_management.views import (
-    ComputerViewSet, 
-    DocumentViewSet, 
-    NotificationViewSet,
-    ScanScheduleViewSet,
-    ScanViewSet
-)
+
+from user_management.views import ScanScheduleViewSet
+
+
+from user_management.views_scan import ScanViewSet
+from user_management.views_notification import NotificationViewSet
+from user_management.views_document import DocumentViewSet
+from user_management.views_computer import ComputerViewSet
+
 from rest_framework.routers import DefaultRouter
+
+
 
 # Create a router for API endpoints
 router = DefaultRouter()

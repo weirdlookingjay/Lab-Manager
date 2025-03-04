@@ -2,11 +2,81 @@ import os
 import logging
 from datetime import datetime
 import unicodedata
-from PyPDF2 import PdfReader
 import shutil
+from PyPDF2 import PdfReader
 from .logs import log_scan_operation
+import re
 
 logger = logging.getLogger(__name__)
+
+# Common patterns to skip in names
+skip_patterns = [
+    'test', 'sample', 'example', 'demo',
+    'unknown', 'anonymous', 'unnamed',
+    'user', 'student', 'client',
+    'profile', 'report', 'results'
+]
+
+def validate_name(name):
+    """Validate and clean a name extracted from O*NET PDF.
+    
+    Args:
+        name: The name string to validate
+        
+    Returns:
+        Cleaned and validated name string, or None if invalid
+    """
+    if not name:
+        return None
+        
+    # Clean and normalize the name
+    name = " ".join(name.split())  # Normalize whitespace
+    
+    # Basic validation rules
+    if any(pattern in name.lower() for pattern in skip_patterns):
+        return None
+        
+    # Fix common OCR issues and handle name components
+    words = name.split()
+    i = 0
+    while i < len(words):
+        curr_word = words[i]
+        next_word = words[i + 1] if i < len(words) - 1 else None
+        
+        # If we have 3 or more words and current word is short (1-2 chars)
+        # and it's not the first word, it's likely part of the last name
+        if (len(words) >= 3 and i > 0 and len(curr_word) <= 2 and next_word 
+            and curr_word.isalpha() and next_word[0].isupper()):
+            # Combine current word with next word
+            words[i] = curr_word + next_word
+            words.pop(i + 1)
+            continue
+            
+        # If it's a single letter at the end, combine with previous word
+        if len(curr_word) == 1 and curr_word.isalpha() and i > 0 and not next_word:
+            words[i-1] = words[i-1] + curr_word
+            words.pop(i)
+            continue
+            
+        i += 1
+    
+    # Convert to proper case, preserving Spanish particles
+    for i, word in enumerate(words):
+        lower_word = word.lower()
+        # Handle Spanish name particles
+        if lower_word in ['de', 'la', 'del', 'las', 'los', 'y', 'e']:
+            words[i] = lower_word
+        else:
+            # Only capitalize first letter
+            words[i] = word[0].upper() + word[1:].lower()
+    
+    result = " ".join(words)
+    
+    # Final validation
+    if not result or len(result.replace(" ", "")) < 2:
+        return None
+        
+    return result
 
 def extract_name_from_onet(content):
     """Extract name from O*NET Interest Profiler PDF content."""
@@ -22,20 +92,24 @@ def extract_name_from_onet(content):
             return None
             
         # Common patterns for name extraction
-        english_patterns = ["printed for:", "printed for", "name:"]
+        english_patterns = [
+            "printed for:", "printed for", "name:", "name",
+            "profile for:", "profile for", "report for:", "report for"
+        ]
         spanish_patterns = [
-            "copia impresa para:", "impreso para:", "nombre:",
-            "copia impr esa par a:"  # Common OCR variant
+            "copia impresa para:", "impreso para:", "nombre:", "nombre",
+            "copia impr esa par a:", "impreso par a:", "reporte para:", "reporte para"
         ]
         
         # Skip patterns - these indicate lines we should not treat as names
         skip_patterns = [
-            "perfil de intereses", "o*net", "onet", 
-            "interest profiler", "character strengths"
+            "perfil de intereses", "o*net", "onet", "interest profiler",
+            "character strengths", "page", "página", "fecha", "date",
+            "report", "reporte", "results", "resultados"
         ]
         
         # First try exact patterns at start of lines
-        for idx, line in enumerate(lines[:10]):  # Only check first 10 lines
+        for idx, line in enumerate(lines[:15]):  # Check first 15 lines
             line = line.strip()
             if not line:
                 continue
@@ -46,45 +120,21 @@ def extract_name_from_onet(content):
             if any(pattern in lower_line for pattern in skip_patterns):
                 continue
                 
-            # Handle English versions
-            for pattern in english_patterns:
+            # Handle English and Spanish versions
+            for pattern in english_patterns + spanish_patterns:
                 if pattern in lower_line:
                     name = line.split(":", 1)[1].strip() if ":" in line else line.replace(pattern, "", 1).strip()
-                    if name and len(name.split()) >= 2:
-                        # Skip if name contains any skip patterns
-                        name_lower = name.lower()
-                        if any(pattern in name_lower for pattern in skip_patterns):
-                            continue
-                        # Normalize name - capitalize each part and remove extra spaces
-                        name_parts = [part.strip().capitalize() for part in name.split() if part.strip()]
-                        normalized_name = " ".join(name_parts)
-                        logger.info(f"Successfully extracted name from O*NET (English): {normalized_name}", extra={'event': 'PARSE_ONET_PDF'})
-                        return normalized_name
-            
-            # Handle Spanish versions
-            for pattern in spanish_patterns:
-                if pattern in lower_line:
-                    name = line.split(":", 1)[1].strip() if ":" in line else line.replace(pattern, "", 1).strip()
-                    if name and len(name.split()) >= 2:
-                        # Skip if name contains any skip patterns
-                        name_lower = name.lower()
-                        if any(pattern in name_lower for pattern in skip_patterns):
-                            continue
-                        # Normalize Spanish name
-                        name_parts = [part.strip().capitalize() for part in name.split() if part.strip()]
-                        normalized_name = " ".join(name_parts)
-                        logger.info(f"Successfully extracted name from O*NET (Spanish): {normalized_name}", extra={'event': 'PARSE_ONET_PDF'})
-                        return normalized_name
+                    validated_name = validate_name(name)
+                    if validated_name:
+                        logger.info(f"Successfully extracted name from O*NET: {validated_name}", extra={'event': 'PARSE_ONET_PDF'})
+                        return validated_name
         
         # If no pattern match, check first non-empty line if it looks like a name
-        first_line = lines[0].strip()
-        if len(first_line.split()) >= 2:
-            # Skip if line contains any skip patterns
-            if not any(pattern in first_line.lower() for pattern in skip_patterns):
-                name_parts = [part.strip().capitalize() for part in first_line.split() if part.strip()]
-                normalized_name = " ".join(name_parts)
-                logger.info(f"Extracted name from first line: {normalized_name}", extra={'event': 'PARSE_ONET_PDF'})
-                return normalized_name
+        for line in lines[:3]:  # Check first 3 lines for potential name
+            validated_name = validate_name(line)
+            if validated_name:
+                logger.info(f"Extracted name from line: {validated_name}", extra={'event': 'PARSE_ONET_PDF'})
+                return validated_name
                         
         logger.warning("No valid name patterns found in O*NET PDF", extra={'event': 'PARSE_ONET_PDF'})
         return None
@@ -153,73 +203,92 @@ def is_duplicate_onet(directory, name):
         logger.error(f"Error in is_duplicate_onet: {str(e)}")
         return False
 
-def process_onet_pdf(file_path, current_date=None):
-    """Process O*NET Interest Profiler PDF and return tuple of (success, new_filename)."""
+def generate_onet_filename(name, date_str):
+    """Generate standardized filename for O*NET Interest Profiler PDFs.
+    
+    Args:
+        name: The extracted name from the PDF
+        date_str: Date string in MMDDYYYY format
+        
+    Returns:
+        Standardized filename string
+    """
+    if not name or not date_str:
+        return None
+        
+    # Split into name components and clean
+    name_parts = name.split()
+    if len(name_parts) < 2:
+        return None
+        
+    # Keep original name order - first name followed by last name
+    filename = f"O_NET_Interest_Profiler_{name.replace(' ', '_')}_{date_str}.pdf"
+    
+    return filename
+
+def process_onet_pdf(file_path, current_date=None, computer_label=None):
+    """
+    Process O*NET Interest Profiler PDF and return tuple of (success, new_filename).
+    
+    Args:
+        file_path: Path to the PDF file
+        current_date: Optional date to use for filename (defaults to now)
+        computer_label: Label of the computer being scanned (required)
+    """
     try:
         # Skip non-O*NET files
         filename = os.path.basename(file_path).lower()
         if not any(x in filename for x in ['o_net', 'o*net', 'onet', 'perfil_o_net', 'perfil onet']):
-            logger.info(f"Skipping non-O*NET file: {filename}", extra={'event': 'PROCESS_ONET_PDF'})
+            logger.info(f"Skipping non-O*NET file: {filename}")
             return False, None
             
         # Skip VIA and other non-Interest Profiler PDFs
         if any(x in filename for x in ['via character', 'job zones', 'score report', 'clearinghouse']):
-            logger.info(f"Skipping non-Interest Profiler file: {filename}", extra={'event': 'PROCESS_ONET_PDF'})
+            logger.info(f"Skipping non-Interest Profiler file: {filename}")
             return False, None
 
-        # Read PDF content
+        # Extract name from PDF
         reader = PdfReader(file_path)
         content = ""
         for page in reader.pages:
             content += page.extract_text()
-
-        # Extract name
         name = extract_name_from_onet(content)
         if not name:
-            logger.warning(f"Could not extract name from O*NET PDF: {file_path}", extra={'event': 'PROCESS_ONET_PDF'})
+            logger.info(f"Could not extract name from O*NET PDF: {file_path}")
             return False, None
-
-        # Generate new filename
-        if not current_date:
+            
+        logger.info(f"Successfully extracted name from O*NET: {name}")
+        
+        # Generate standardized filename
+        if current_date is None:
             current_date = datetime.now()
         date_str = current_date.strftime("%m%d%Y")
         
-        # Normalize name for filename
-        name_parts = name.split()
-        normalized_parts = []
-        for part in name_parts:
-            # Remove special characters and normalize spaces
-            clean_part = ''.join(c for c in part if c.isalnum() or c.isspace()).strip()
-            if clean_part:
-                normalized_parts.append(clean_part)
-        
-        filename_name = "_".join(normalized_parts)
-        new_filename = f"O_NET_Interest_Profiler_{filename_name}_{date_str}.pdf"
+        new_filename = generate_onet_filename(name, date_str)
         
         # Get Django media root for storing files
         from django.conf import settings
-        media_root = settings.MEDIA_ROOT
         
-        # Create computer-specific directory in media root
-        computer_name = os.path.basename(os.path.dirname(os.path.dirname(file_path)))
-        target_dir = os.path.join(media_root, computer_name)
-        os.makedirs(target_dir, exist_ok=True)
+        # Use provided computer label or fall back to "unknown" if not provided
+        dest_dir = os.path.join(settings.MEDIA_ROOT, "pdfs", computer_label or "unknown")
+        os.makedirs(dest_dir, exist_ok=True)
         
-        target_path = os.path.join(target_dir, new_filename)
+        dest_path = os.path.join(dest_dir, new_filename)
         
-        # Copy the file to Django media directory
-        try:
-            shutil.copy2(file_path, target_path)
-            logger.info(f"Successfully copied file to: {target_path}", extra={'event': 'PROCESS_ONET_PDF'})
-        except Exception as e:
-            logger.error(f"Error copying file to {target_path}: {str(e)}", extra={'event': 'PROCESS_ONET_PDF'})
-            return False, None
+        # Check if file already exists
+        if os.path.exists(dest_path):
+            logger.info(f"File already exists, skipping: {new_filename}")
+            return True, new_filename
+            
+        # Copy file to destination
+        shutil.copy2(file_path, dest_path)
+        logger.info(f"Successfully copied file to: {dest_path}")
+        logger.info(f"Generated new filename: {new_filename}")
         
-        logger.info(f"Generated new filename: {new_filename}", extra={'event': 'PROCESS_ONET_PDF'})
         return True, new_filename
-
+        
     except Exception as e:
-        logger.error(f"Error processing O*NET PDF {file_path}: {str(e)}", extra={'event': 'PROCESS_ONET_PDF'})
+        logger.error(f"Error processing O*NET PDF {file_path}: {str(e)}")
         return False, None
 
 def normalize_name(name):

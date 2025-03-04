@@ -284,7 +284,7 @@ CELERY_BEAT_SCHEDULE = {
     },
     'check-scan-schedules': {
         'task': 'user_management.tasks.check_and_run_scheduled_scans',
-        'schedule': crontab(minute='*'),  # Run every minute
+        'schedule': crontab(minute='*/2'),  # Run every 2 minutes
     },
 }
 

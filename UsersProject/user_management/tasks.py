@@ -3,13 +3,17 @@ from celery import shared_task
 from .models import Computer, AuditLog, LogAggregation
 import pandas as pd
 import os
-from django.conf import settings
-from datetime import datetime
+import sys
+import time
 import logging
+import threading
+from datetime import datetime, timedelta
+from django.conf import settings
 import shutil
 from .utils.pdf_processor import process_onet_pdf, is_onet_profile
 from UsersProject.celery import app
 from rest_framework.parsers import JSONParser
+from django.db import transaction
 
 logger = logging.getLogger(__name__)
 
@@ -144,145 +148,184 @@ def analyze_logs():
     from .services.log_analysis import LogAnalysisService
     LogAnalysisService.analyze_logs()
 
-@app.task(name='user_management.tasks.check_and_run_scheduled_scans')
-def check_and_run_scheduled_scans():
+@app.task(
+    name='user_management.tasks.check_and_run_scheduled_scans',
+    bind=True,
+    max_retries=3,
+    time_limit=300,
+    soft_time_limit=240,
+    acks_late=True,
+    reject_on_worker_lost=True,
+    task_track_started=True
+)
+def check_and_run_scheduled_scans(self):
     """Check for and execute any scheduled scans that are due"""
-    # Use the scan_operations logger for all scan-related logging
     scan_logger = logging.getLogger('scan_operations')
     scan_logger.info("Starting scheduled scan check...")
     try:
         from user_management.models import ScanSchedule
         from django.utils import timezone
         import time
+        import pytz
+        from django.db.utils import OperationalError
         
-        now = timezone.localtime()
-        scan_logger.info(f"Current time (local): {now}")
+        now_utc = timezone.now()
+        est = pytz.timezone('America/New_York')
+        now_est = now_utc.astimezone(est)
         
-        # Get all enabled schedules
-        all_schedules = ScanSchedule.objects.filter(enabled=True)
-        scan_logger.info(f"Found {all_schedules.count()} enabled schedules")
+        scan_logger.info(f"Current time - UTC: {now_utc}, EST: {now_est}")
         
-        for schedule in all_schedules:
-            # Convert next_run to local time for comparison
-            next_run_local = timezone.localtime(schedule.next_run) if schedule.next_run else None
-            scan_logger.info(f"Schedule {schedule.id}: time={schedule.time}, next_run={schedule.next_run} (UTC), {next_run_local} (local)")
-            
-            # Check if schedule is due
-            if next_run_local and next_run_local <= now:
-                scan_logger.info(f"Schedule {schedule.id} is due for execution")
-                try:
-                    computer_ids = list(schedule.computers.values_list('id', flat=True))
-                    if not computer_ids:
-                        scan_logger.warning(f"Schedule {schedule.id} has no computers associated")
-                        continue
+        max_retries = 3
+        retry_delay = 1
+        
+        for attempt in range(max_retries):
+            try:
+                with transaction.atomic():
+                    all_schedules = (ScanSchedule.objects
+                        .select_for_update(nowait=True)
+                        .filter(enabled=True)
+                        .filter(next_run__lte=now_utc)
+                    )
+                    scan_logger.info(f"Found {all_schedules.count()} due schedules")
                     
-                    scan_logger.info(f"Found {len(computer_ids)} computers to scan: {computer_ids}")
-                    
-                    # Start the scan directly using ScanViewSet
-                    from user_management.views import ScanViewSet
-                    from rest_framework.test import APIRequestFactory, force_authenticate
-                    from rest_framework.request import Request
-                    from django.contrib.auth import get_user_model
-                    
-                    # Create the viewset and initialize required attributes
-                    scan_viewset = ScanViewSet()
-                    scan_viewset.format_kwarg = None
-                    scan_viewset.action_map = {'post': 'start'}  # Map POST to 'start' action
-                    scan_viewset.action = 'start'  # Set the action to 'start'
-                    scan_viewset.detail = False
-                    scan_viewset.basename = 'scan'
-                    
-                    # Set the logger to use for scan operations
-                    scan_viewset.logger = scan_logger
-                    
-                    # Create a mock request with the computers data
-                    factory = APIRequestFactory()
-                    wsgi_request = factory.post('/api/scan/start/', {'computers': computer_ids},
-                                             format='json')
-                    
-                    # Get a superuser to authenticate the request
-                    User = get_user_model()
-                    admin_user = User.objects.filter(is_superuser=True).first()
-                    if not admin_user:
-                        scan_logger.error("No superuser found to authenticate scheduled scan")
-                        continue
-
-                    # Properly authenticate the request
-                    force_authenticate(wsgi_request, user=admin_user)
-                    
-                    # Create DRF Request object with proper wsgi setup
-                    wsgi_request.META['CONTENT_TYPE'] = 'application/json'
-                    wsgi_request.META['HTTP_ACCEPT'] = 'application/json'
-                    request = Request(wsgi_request)
-                    request.user = admin_user
-                    request.method = 'POST'
-                    request.parsers = [JSONParser()]
-                    
-                    # Set up request data properly
-                    computers_data = {'computers': [str(computer.id) for computer in schedule.computers.all()]}
-                    request._data = computers_data
-                    request._full_data = computers_data  # DRF uses _full_data internally
-                    
-                    # Execute the scan
-                    scan_logger.info(f"Started scan for schedule {schedule.id}")
-                    response = scan_viewset.start(request)
-                    
-                    if response.status_code == 200:
-                        scan_logger.info(f"Scan completed successfully. {response.data.get('message', '')}")
-                    else:
-                        scan_logger.error(f"Scan failed with status {response.status_code}: {response.data}")
-                    
-                    # Wait for scan to complete
-                    max_wait = 300  # 5 minutes max wait
-                    wait_time = 0
-                    scan_complete = False
-                    scan_success = False
-                    
-                    while wait_time < max_wait:
-                        if not scan_viewset._scan_in_progress:
-                            scan_complete = True
-                            stats = scan_viewset._current_scan_stats
+                    for schedule in all_schedules:
+                        next_run_utc = schedule.next_run
+                        next_run_est = next_run_utc.astimezone(est) if next_run_utc else None
+                        
+                        scan_logger.info(
+                            f"Processing schedule {schedule.id}: time={schedule.time}, "
+                            f"next_run UTC={next_run_utc}, EST={next_run_est}"
+                        )
+                        
+                        try:
+                            with transaction.atomic():
+                                schedule.refresh_from_db()
+                                
+                                success = start_scan_for_schedule(schedule)
+                                
+                                if success:
+                                    schedule.next_run = schedule.calculate_next_run()
+                                    schedule.last_run = now_utc
+                                    schedule.last_status = 'success'
+                                    schedule.save()
+                                    scan_logger.info(f"Updated next run time to {schedule.next_run}")
+                                else:
+                                    schedule.last_status = 'failed'
+                                    schedule.save()
+                                    scan_logger.error("Scan failed. Schedule updated with failure status.")
+                                    
+                        except Exception as e:
+                            scan_logger.error(f"Error processing schedule {schedule.id}: {str(e)}", exc_info=True)
+                            schedule.last_status = 'error'
+                            schedule.save()
+                            continue
                             
-                            # Check if scan was successful
-                            failed_computers = stats.get('failed_computers', [])
-                            total_computers = stats.get('total_computers', 0)
-                            computers_scanned = stats.get('computers_scanned', 0)
-                            
-                            if not failed_computers and computers_scanned == total_computers:
-                                scan_success = True
-                                scan_logger.info(f"Scan completed successfully. Processed {computers_scanned} computers.")
-                            else:
-                                scan_logger.error(f"Scan completed with issues. Failed computers: {failed_computers}")
-                                scan_logger.error(f"Computers scanned: {computers_scanned}/{total_computers}")
-                            break
-                            
-                        time.sleep(5)
-                        wait_time += 5
-                        scan_logger.info(f"Waiting for scan to complete... ({wait_time}s)")
+                break  # Exit retry loop if successful
                     
-                    if not scan_complete:
-                        scan_logger.error(f"Scan timeout after {max_wait} seconds")
-                    elif scan_success:
-                        # Only update schedule if scan was successful
-                        schedule.last_run = now
-                        schedule.next_run = schedule.calculate_next_run()
-                        schedule.save()
-                        scan_logger.info(f"Updated schedule {schedule.id} next_run to {schedule.next_run} (UTC), {timezone.localtime(schedule.next_run)} (local)")
-                    else:
-                        scan_logger.error("Scan completed but had failures. Not updating schedule.")
+            except OperationalError as e:
+                if attempt < max_retries - 1:
+                    scan_logger.warning(f"Database lock conflict, attempt {attempt + 1} of {max_retries}")
+                    time.sleep(retry_delay * (attempt + 1))
+                else:
+                    scan_logger.error("Failed to acquire database lock after max retries")
+                    raise
                     
-                except Exception as e:
-                    scan_logger.error(f"Error processing schedule {schedule.id}: {str(e)}", exc_info=True)
-            else:
-                scan_logger.info(f"Schedule {schedule.id} is not due yet. Current: {now}, Next run: {next_run_local}")
-                
     except Exception as e:
         scan_logger.error(f"Error checking scheduled scans: {str(e)}", exc_info=True)
+        raise
+
+def start_scan_for_schedule(schedule):
+    """Start a scan for the given schedule."""
+    scan_logger = logging.getLogger('scan_operations')
+    try:
+        computer_ids = list(schedule.computers.values_list('id', flat=True))
+        if not computer_ids:
+            scan_logger.warning(f"Schedule {schedule.id} has no computers associated")
+            return False
+            
+        scan_logger.info(f"Found {len(computer_ids)} computers to scan: {computer_ids}")
+        
+        from user_management.views_scan import ScanViewSet
+        from rest_framework.test import APIRequestFactory, force_authenticate
+        from rest_framework.request import Request
+        from django.contrib.auth import get_user_model
+        from rest_framework.parsers import JSONParser
+        
+        scan_viewset = ScanViewSet()
+        scan_viewset.format_kwarg = None
+        scan_viewset.action_map = {'post': 'start'}
+        scan_viewset.action = 'start'
+        scan_viewset.detail = False
+        scan_viewset.basename = 'scan'
+        scan_viewset.logger = scan_logger
+        
+        factory = APIRequestFactory()
+        wsgi_request = factory.post('/api/scan/start/', {'computers': computer_ids}, format='json')
+        
+        User = get_user_model()
+        admin_user = User.objects.filter(is_superuser=True).first()
+        if not admin_user:
+            scan_logger.error("No superuser found to authenticate scheduled scan")
+            return False
+
+        force_authenticate(wsgi_request, user=admin_user)
+        wsgi_request.META['CONTENT_TYPE'] = 'application/json'
+        wsgi_request.META['HTTP_ACCEPT'] = 'application/json'
+        request = Request(wsgi_request)
+        request.user = admin_user
+        request.method = 'POST'
+        request.parsers = [JSONParser()]
+        
+        computers_data = {'computers': [str(computer.id) for computer in schedule.computers.all()]}
+        request._data = computers_data
+        request._full_data = computers_data
+        
+        scan_logger.info(f"Starting scan for schedule {schedule.id}")
+        response = scan_viewset.start(request)
+        
+        if response.status_code != 200:
+            scan_logger.error(f"Scan failed with status {response.status_code}: {response.data}")
+            return False
+            
+        scan_logger.info(f"Scan initiated successfully. {response.data.get('message', '')}")
+        
+        max_wait = 240
+        check_interval = 5
+        wait_time = 0
+        
+        while wait_time < max_wait:
+            if not scan_viewset._scan_in_progress:
+                stats = scan_viewset._current_scan_stats
+                failed_computers = stats.get('failed_computers', [])
+                total_computers = stats.get('total_computers', 0)
+                computers_scanned = stats.get('computers_scanned', 0)
+                
+                if not failed_computers and computers_scanned == total_computers:
+                    scan_logger.info(f"Scan completed successfully. Processed {computers_scanned} computers.")
+                    return True
+                else:
+                    scan_logger.error(
+                        f"Scan completed with issues. Failed computers: {failed_computers}. "
+                        f"Computers scanned: {computers_scanned}/{total_computers}"
+                    )
+                    return False
+                    
+            time.sleep(check_interval)
+            wait_time += check_interval
+            
+            if wait_time % 30 == 0:
+                scan_logger.info(f"Scan in progress... Time elapsed: {wait_time}s")
+        
+        scan_logger.error(f"Scan timeout after {max_wait} seconds")
+        return False
+        
+    except Exception as e:
+        scan_logger.error(f"Error in scan execution: {str(e)}", exc_info=True)
+        return False
 
 def schedule_file_operations(hour: int, minute: int, name: str = "daily_backup"):
     """Schedule file operations to run at a specific time."""
     try:
-        # Create new schedule
         run_file_operations.apply_async(eta=datetime.now().replace(hour=hour, minute=minute, second=0, microsecond=0))
         
         log_message(f"Scheduled file operations for {hour:02d}:{minute:02d} daily")

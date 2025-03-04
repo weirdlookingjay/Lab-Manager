@@ -553,78 +553,78 @@ class ScanSchedule(models.Model):
         )
         logger.info(f"Initial next_run (EST): {initial_next_run}")
 
-        # If this is a newly created/updated schedule (no last_run)
-        if not self.last_run:
-            # If the time hasn't passed today, run today
-            if current_time.time() < schedule_time:
-                logger.info(f"New schedule, time hasn't passed yet, running today (EST): {initial_next_run}")
-                return initial_next_run
-            # If we just missed it (within 2 minutes), still run today
-            grace_period = current_time - timedelta(minutes=2)
-            if grace_period.time() <= schedule_time <= current_time.time():
-                logger.info(f"New schedule within grace period, running today (EST): {initial_next_run}")
-                return initial_next_run
-        
-        # For all other cases, schedule for the next occurrence
+        # For daily schedules
         if self.type == 'daily':
-            # For daily, if time has passed today (including grace period), schedule for tomorrow
-            grace_period = current_time - timedelta(minutes=2)
-            if grace_period.time() > schedule_time:
-                initial_next_run += timedelta(days=1)
-                logger.info(f"Daily schedule, time passed for today (including grace period), advancing to tomorrow (EST): {initial_next_run}")
+            # If time hasn't passed yet today, run today
+            if current_time.time() < schedule_time:
+                next_run = initial_next_run
+                logger.info(f"New schedule, time hasn't passed yet, running today (EST): {next_run}")
+            # If time has passed, run tomorrow
             else:
-                logger.info(f"Daily schedule, within grace period, running today (EST): {initial_next_run}")
-        
-        elif self.type == 'weekly' and self.selected_days:
-            # For weekly, find the next selected day
-            current_weekday = current_time.weekday()
-            days_ahead = 7
-            
-            # Sort days to ensure we check them in order
-            selected_days = sorted(self.selected_days)
-            
-            # First check remaining days this week
-            for day in selected_days:
-                days_until = (day - current_weekday) % 7
-                if days_until == 0:  # Same day
-                    if current_time.time() < schedule_time:  # Time hasn't passed
-                        days_ahead = 0
-                        break
-                elif days_until < days_ahead:
-                    days_ahead = days_until
+                next_run = initial_next_run + timedelta(days=1)
+                logger.info(f"Time has passed, running tomorrow (EST): {next_run}")
+
+        # For weekly schedules
+        elif self.type == 'weekly':
+            selected_days = self.selected_days or []
+            if not selected_days:
+                return None
+
+            # Convert days to integers (0=Monday, 6=Sunday)
+            today = current_time.weekday()
+            days = [int(d) for d in selected_days]
+            days.sort()
+
+            # Find next scheduled day
+            next_day = None
+            for day in days:
+                if day > today or (day == today and current_time.time() < schedule_time):
+                    next_day = day
                     break
             
-            # If no days found this week or time passed today, look at next week
-            if days_ahead == 7:
-                days_ahead = (selected_days[0] - current_weekday) % 7
-                if days_ahead == 0:
-                    days_ahead = 7
-            
-            initial_next_run += timedelta(days=days_ahead)
-            logger.info(f"Weekly schedule, advanced to next selected weekday (EST): {initial_next_run}")
-        
-        elif self.type == 'monthly' and self.monthly_date:
-            # For monthly, move to the next month on the same date
-            next_date = current_time.date()
-            
-            # If we haven't passed the day this month and haven't passed the time
-            if current_time.day < self.monthly_date or (
-                current_time.day == self.monthly_date and current_time.time() < schedule_time
-            ):
-                # Stay in current month
-                next_date = next_date.replace(day=self.monthly_date)
+            # If no day found, get first day from next week
+            if next_day is None:
+                next_day = days[0]
+                days_ahead = 7 - today + next_day
             else:
-                # Move to next month
-                if current_time.month == 12:
-                    next_date = next_date.replace(year=current_time.year + 1, month=1, day=self.monthly_date)
-                else:
-                    next_date = next_date.replace(month=current_time.month + 1, day=self.monthly_date)
-            
-            initial_next_run = est.localize(datetime.combine(next_date, schedule_time))
-            logger.info(f"Monthly schedule, next run (EST): {initial_next_run}")
+                days_ahead = next_day - today
 
-        logger.info(f"Final next_run time: {initial_next_run}")
-        return initial_next_run
+            next_run = initial_next_run + timedelta(days=days_ahead)
+
+        # For monthly schedules
+        elif self.type == 'monthly':
+            if not self.monthly_date:
+                return None
+
+            # Get the target day of month
+            target_day = min(self.monthly_date, calendar.monthrange(current_time.year, current_time.month)[1])
+            
+            # Create target datetime
+            target_date = current_time.replace(day=target_day)
+            next_run = est.localize(datetime.combine(target_date.date(), schedule_time))
+
+            # If target time has passed this month, move to next month
+            if current_time > next_run:
+                if current_time.month == 12:
+                    next_run = next_run.replace(year=current_time.year + 1, month=1)
+                else:
+                    next_run = next_run.replace(month=current_time.month + 1)
+                # Adjust for shorter months
+                target_day = min(self.monthly_date, calendar.monthrange(next_run.year, next_run.month)[1])
+                next_run = next_run.replace(day=target_day)
+
+        else:
+            return None
+
+        # Add a small buffer (2 minutes) to prevent immediate re-runs
+        # Only add buffer if the time difference is very small
+        time_diff = abs((next_run - current_time).total_seconds())
+        if time_diff < 120:  # 2 minutes
+            next_run = current_time + timedelta(minutes=2)
+            logger.info(f"Added 2 minute buffer to prevent immediate re-run")
+
+        logger.info(f"Final next_run time: {next_run}")
+        return next_run
 
     def save(self, *args, **kwargs):
         """Update next_run time before saving"""
@@ -632,9 +632,10 @@ class ScanSchedule(models.Model):
             # Calculate next run in EST
             next_run_local = self.calculate_next_run()
             if next_run_local:
-                # Only convert to UTC at the last moment before saving to database
-                self.next_run = next_run_local.astimezone(pytz.UTC)
-                logger.info(f"Saving schedule - EST: {next_run_local}, UTC: {self.next_run}")
+                # Store both EST and UTC times in logs for easier debugging
+                utc_time = next_run_local.astimezone(pytz.UTC)
+                logger.info(f"Saving schedule - EST: {next_run_local}, UTC: {utc_time}")
+                self.next_run = utc_time
             
         super().save(*args, **kwargs)
 
