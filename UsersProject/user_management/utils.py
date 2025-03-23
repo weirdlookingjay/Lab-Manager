@@ -1,8 +1,8 @@
 import logging
 from django.utils import timezone
-from .models import AuditLog, Notification, SystemLog
+from .models import AuditLog, Notification, SystemLog, Computer
 from typing import Optional, Dict, Any
-from django.http import HttpRequest
+from django.http import HttpRequest, Http404
 
 logger = logging.getLogger('user_management')
 
@@ -180,3 +180,19 @@ def log_computer_status(
         details=base_details,
         request=request
     )
+
+def get_computer_or_404(computer_id):
+    """
+    Get a computer by ID or raise Http404 if not found.
+    Also verifies that the computer is online.
+    """
+    from django.http import Http404
+    from .models import Computer
+    
+    try:
+        computer = Computer.objects.get(id=computer_id)
+        if not computer.is_online():
+            raise Http404("Computer is offline")
+        return computer
+    except Computer.DoesNotExist:
+        raise Http404("Computer not found")

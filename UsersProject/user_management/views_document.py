@@ -13,6 +13,7 @@ from django.conf import settings
 from .authentication import CookieTokenAuthentication
 from .models import DocumentTag
 from django.http import HttpResponse
+from django.urls import reverse
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('scan_operations')
@@ -169,4 +170,23 @@ class DocumentViewSet(viewsets.ViewSet):
             
         except Exception as e:
             logger.error(f"Error in document download: {str(e)}")
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=True, methods=['get'], url_path='view/(?P<path>.*)')
+    def view(self, request, path=None):
+        """Get a URL for viewing a specific document."""
+        try:
+            if not path:
+                return Response({'error': 'Path parameter is required'}, status=400)
+            
+            # Construct the download URL with preview=true
+            download_url = reverse('document-download')
+            preview_url = f"{download_url}?path={path}&preview=true"
+            
+            return Response({
+                'url': preview_url
+            })
+            
+        except Exception as e:
+            logger.error(f"Error getting document view URL: {str(e)}")
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

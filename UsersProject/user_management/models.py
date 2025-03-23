@@ -10,6 +10,7 @@ import logging
 from django.contrib.auth import get_user_model
 import pytz
 from datetime import datetime, timedelta, time as datetime_time
+from typing import Dict, Any
 
 logger = logging.getLogger(__name__)
 
@@ -119,27 +120,199 @@ class CustomUser(AbstractUser):
             self.save()
 
 class Computer(models.Model):
-    ip_address = models.CharField(max_length=15, unique=True)
-    label = models.CharField(max_length=100)
+    """Track computer information and metrics"""
+    hostname = models.CharField(max_length=255, unique=True, null=True, blank=True)
+    label = models.CharField(max_length=255)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    os_version = models.CharField(max_length=255, null=True, blank=True)
+    cpu_model = models.CharField(max_length=255, null=True, blank=True)
+    cpu_cores = models.IntegerField(null=True, blank=True)
+    cpu_threads = models.IntegerField(null=True, blank=True)
+    cpu_usage = models.FloatField(null=True, blank=True)
+    cpu_percent = models.FloatField(null=True, blank=True)
+    memory_total = models.BigIntegerField(null=True, blank=True)
+    memory_usage = models.FloatField(null=True, blank=True)
+    memory_percent = models.FloatField(null=True, blank=True)
+    total_disk = models.BigIntegerField(null=True, blank=True)
+    disk_usage = models.FloatField(null=True, blank=True)
+    disk_percent = models.FloatField(null=True, blank=True)
+    device_class = models.CharField(max_length=50, null=True, blank=True)
+    boot_time = models.DateTimeField(null=True, blank=True)
     last_seen = models.DateTimeField(null=True, blank=True)
+    last_metrics_update = models.DateTimeField(null=True, blank=True)
     is_online = models.BooleanField(default=False)
-    model = models.CharField(max_length=100, null=True, blank=True)
-    last_transfer = models.DateTimeField(null=True, blank=True)
-    total_transfers = models.IntegerField(default=0)
-    successful_transfers = models.IntegerField(default=0)
-    failed_transfers = models.IntegerField(default=0)
-    total_bytes_transferred = models.BigIntegerField(default=0)
-    os_version = models.CharField(max_length=100, null=True, blank=True)
-    user_profile = models.CharField(max_length=100, null=True, blank=True)
-    username = models.CharField(max_length=100, null=True, blank=True)  # Added for network authentication
-    password = models.CharField(max_length=100, null=True, blank=True)  # Added for network authentication
+    logged_in_user = models.CharField(max_length=255, null=True, blank=True)
+    metrics = models.JSONField(null=True, blank=True)
+    system_uptime = models.DurationField(null=True, blank=True)
 
-    class Meta:
-        db_table = 'computers'
-        managed = False  # Tell Django not to manage this table since it already exists
+    def is_online(self) -> bool:
+        """
+        Determine if the computer is online based on last_metrics_update and last_seen.
+        A computer is considered online if either:
+        1. It has reported metrics within the last 30 minutes
+        2. It has been seen within the last 30 minutes
+        """
+        if not self.last_metrics_update and not self.last_seen:
+            return False
+
+        now = timezone.now()
+        threshold = timedelta(minutes=30)
+
+        # Check last metrics update
+        if self.last_metrics_update and (now - self.last_metrics_update) < threshold:
+            return True
+
+        # Fall back to last seen check
+        if self.last_seen and (now - self.last_seen) < threshold:
+            return True
+
+        return False
+
+    def get_status(self) -> str:
+        """Get the current status of the computer."""
+        return 'online' if self.is_online else 'offline'
+
+    def update_system_uptime(self):
+        """Update system uptime based on boot time."""
+        if self.boot_time:
+            self.system_uptime = timezone.now() - self.boot_time
+            self.save(update_fields=['system_uptime'])
+
+    def format_uptime(self):
+        """Format the system uptime in a human readable format."""
+        if not self.boot_time:
+            return "Not Available"
+            
+        try:
+            # Convert boot_time to datetime if it's a timestamp
+            if isinstance(self.boot_time, (int, float)):
+                boot_time = datetime.fromtimestamp(self.boot_time, tz=timezone.get_current_timezone())
+            else:
+                boot_time = self.boot_time
+                
+            # Ensure both times are timezone-aware
+            now = timezone.now()
+            if boot_time.tzinfo is None:
+                boot_time = timezone.make_aware(boot_time)
+                
+            # Calculate uptime
+            uptime = now - boot_time
+            days = uptime.days
+            hours = uptime.seconds // 3600
+            minutes = (uptime.seconds % 3600) // 60
+            
+            if days > 0:
+                return f"{days}d {hours}h {minutes}m"
+            elif hours > 0:
+                return f"{hours}h {minutes}m"
+            else:
+                return f"{minutes}m"
+                
+        except (ValueError, TypeError, AttributeError) as e:
+            return "Not Available"
+
+    def format_memory_gb(self) -> str:
+        """Format total memory in GB."""
+        if not self.memory_total:
+            return "0 GB"
+        return f"{self.memory_total / (1024 * 1024 * 1024):.1f} GB"
+
+    def format_disk_gb(self) -> str:
+        """Format total disk space in GB."""
+        if not self.total_disk:
+            return "0 GB"
+        return f"{self.total_disk / (1024 * 1024 * 1024):.1f} GB"
+
+    def update_metrics(self, metrics_data: Dict[str, Any]) -> None:
+        """Update computer metrics from received data"""
+        if not metrics_data:
+            return
+
+        # Update the raw metrics JSON field
+        self.metrics = metrics_data
+
+        # Update CPU metrics
+        if 'cpu' in metrics_data:
+            cpu_data = metrics_data['cpu']
+            if 'percent' in cpu_data:
+                self.cpu_percent = cpu_data['percent']
+            if 'cores' in cpu_data:
+                self.cpu_cores = cpu_data['cores']
+            if 'threads' in cpu_data:
+                self.cpu_threads = cpu_data['threads']
+            if 'model' in cpu_data:
+                self.cpu_model = cpu_data['model']
+
+        # Update Memory metrics
+        if 'memory' in metrics_data:
+            memory_data = metrics_data['memory']
+            if 'percent' in memory_data:
+                self.memory_percent = memory_data['percent']
+            if 'total_bytes' in memory_data:
+                self.memory_total = memory_data['total_bytes']
+
+        # Update Disk metrics
+        if 'disk' in metrics_data:
+            disk_data = metrics_data['disk']
+            if 'percent' in disk_data:
+                self.disk_percent = disk_data['percent']
+            if 'total_bytes' in disk_data:
+                self.total_disk = disk_data['total_bytes']
+
+        # Update system info
+        if 'system' in metrics_data:
+            system_data = metrics_data['system']
+            if 'os_version' in system_data:
+                self.os_version = system_data['os_version']
+            if 'device_class' in system_data:
+                self.device_class = system_data['device_class']
+            if 'logged_in_user' in system_data:
+                self.logged_in_user = system_data['logged_in_user']
+
+        # Update network info
+        if 'ip_address' in metrics_data:
+            self.ip_address = metrics_data['ip_address']
+
+        # Update timestamps
+        self.last_metrics_update = timezone.now()
+        if 'last_seen' in metrics_data:
+            self.last_seen = metrics_data['last_seen']
+
+        # Save all changes
+        self.save()
 
     def __str__(self):
         return f"{self.label} ({self.ip_address})"
+
+    class Meta:
+        ordering = ['label']
+
+class Command(models.Model):
+    COMMAND_TYPES = [
+        ('restart', 'Restart Computer'),
+        ('update', 'Update Agent'),
+        ('custom', 'Custom Command')
+    ]
+
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('running', 'Running'),
+        ('completed', 'Completed'),
+        ('failed', 'Failed')
+    ]
+
+    computer = models.ForeignKey(Computer, on_delete=models.CASCADE, related_name='commands')
+    type = models.CharField(max_length=50, choices=COMMAND_TYPES)
+    parameters = models.JSONField(default=dict, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    created_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.type} command for {self.computer}"
 
 class Schedule(models.Model):
     SCHEDULE_TYPES = [

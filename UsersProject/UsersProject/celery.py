@@ -1,12 +1,13 @@
 from __future__ import absolute_import, unicode_literals
 import os
+
+# Set the default Django settings module for the 'celery' program.
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'UsersProject.settings')
+
 from celery import Celery
 from celery.schedules import crontab
 from django.conf import settings
 from datetime import timedelta
-
-# Set the default Django settings module for the 'celery' program.
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'UsersProject.settings')
 
 app = Celery('UsersProject')
 
@@ -41,8 +42,8 @@ app.conf.update(
     
     # Task execution settings
     task_track_started=True,
-    task_time_limit=300,  # 5 minutes
-    task_soft_time_limit=240,  # 4 minutes
+    task_time_limit=None,  # No time limit for long-running tasks
+    task_soft_time_limit=None,  # No soft time limit
     
     # Task result settings
     task_ignore_result=True,  # Don't store task results
@@ -53,29 +54,19 @@ app.conf.update(
     # Logging settings
     worker_redirect_stdouts=False,  # Don't redirect stdout/stderr
     worker_log_color=True,  # Enable colored logging
-)
-
-# Define the beat schedule
-app.conf.beat_schedule = {
-    'check-scan-schedules': {
-        'task': 'user_management.tasks.check_and_run_scheduled_scans',
-        'schedule': crontab(minute='*'),  # Run every minute for more precise scheduling
-        'options': {
-            'expires': 240,  # Expire after 4 minutes
-            'max_retries': 0,  # Don't retry failed tasks
-            'task_track_started': True,  # Track when task starts
-            'acks_late': True,  # Only acknowledge task after it completes
-            'reject_on_worker_lost': True,  # Reject task if worker dies
-            'time_limit': 240,  # 4 minute hard timeout
-            'soft_time_limit': 180  # 3 minute soft timeout
-        }
-    },
-    'analyze-logs': {
-        'task': 'user_management.tasks.analyze_logs',
-        'schedule': crontab(minute='*/15'),  # Run every 15 minutes
-        'options': {
-            'expires': 840,  # Expire after 14 minutes
-            'max_retries': 0
+    
+    # Beat schedule
+    beat_schedule={
+        'run-relay-client': {
+            'task': 'user_management.tasks.run_relay_client',
+            'schedule': timedelta(seconds=10),  # Start every 10 seconds if not running
+            'options': {
+                'expires': 9  # Task expires if not started within 9 seconds
+            }
+        },
+        'monitor-relay-server': {
+            'task': 'user_management.tasks.monitor_relay_server',
+            'schedule': timedelta(minutes=1)  # Check relay server status every minute
         }
     }
-}
+)

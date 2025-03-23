@@ -1,0 +1,6 @@
+# Required packages for computer agent
+websockets
+python-dotenv
+pywin32
+psutil
+wmi  # For Windows system information

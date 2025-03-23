@@ -50,6 +50,20 @@ os.makedirs(os.path.join(MEDIA_ROOT, 'pdfs'), exist_ok=True)
 # Media files configuration
 PDF_UPLOAD_PATH = 'pdfs/'
 
+# Create directories for AI components
+AI_CACHE_DIR = os.path.join(BASE_DIR, 'ai_cache')
+os.makedirs(os.path.join(AI_CACHE_DIR, 'model_cache/embeddings'), exist_ok=True)
+os.makedirs(os.path.join(AI_CACHE_DIR, 'model_cache/qa'), exist_ok=True)
+os.makedirs(os.path.join(AI_CACHE_DIR, 'vector_cache'), exist_ok=True)
+
+# Cache configuration
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.filebased.FileBasedCache',
+        'LOCATION': os.path.join(AI_CACHE_DIR, 'django_cache'),
+    }
+}
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
@@ -99,6 +113,9 @@ CORS_ALLOW_HEADERS = [
 ]
 CORS_EXPOSE_HEADERS = ['content-type', 'x-csrftoken']
 CORS_PREFLIGHT_MAX_AGE = 86400  # 24 hours
+
+# Disable automatic URL slash appending
+APPEND_SLASH = False
 
 # Application definition
 
@@ -256,10 +273,16 @@ AUTH_USER_MODEL = 'user_management.CustomUser'
 
 # Django REST Framework settings
 REST_FRAMEWORK = {
+    'DEFAULT_PARSER_CLASSES': [
+        'rest_framework.parsers.JSONParser',
+        'rest_framework.parsers.MultiPartParser',
+        'rest_framework.parsers.FormParser',
+    ],
     'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.SessionAuthentication',
+        'rest_framework.authentication.BasicAuthentication',
         'user_management.authentication.CookieTokenAuthentication',
         'rest_framework.authentication.TokenAuthentication',
-        'rest_framework.authentication.SessionAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
@@ -270,7 +293,7 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_THROTTLE_RATES': {
         'anon': '100/day',
-        'user': '1000/day'
+        'user': '60/minute'  # Allow 1 request per second for authenticated users
     }
 }
 
@@ -279,13 +302,26 @@ TOKEN_EXPIRED_AFTER_SECONDS = 86400  # 24 hours
 
 # Celery Beat Schedule
 CELERY_BEAT_SCHEDULE = {
+    'run_relay_client': {
+        'task': 'user_management.tasks.ensure_relay_client_running',
+        'schedule': timedelta(minutes=1),
+        'options': {
+            'expires': None,
+            'max_retries': None,
+            'time_limit': None,
+            'soft_time_limit': None,
+            'task_track_started': True,
+            'acks_late': True,
+            'reject_on_worker_lost': True
+        }
+    },
     'analyze_logs': {
         'task': 'user_management.tasks.analyze_logs',
-        'schedule': crontab(minute='*/5'),  # Run every 5 minutes
+        'schedule': timedelta(minutes=5),
     },
     'check-scan-schedules': {
         'task': 'user_management.tasks.check_and_run_scheduled_scans',
-        'schedule': crontab(minute='*/2'),  # Run every 2 minutes
+        'schedule': timedelta(minutes=2),
     },
 }
 
@@ -312,12 +348,12 @@ LOGGING = {
     'disable_existing_loggers': False,
     'formatters': {
         'verbose': {
-            'format': '{levelname} {asctime} {module} {message}',
-            'style': '{',
+            'format': '%(levelname)s %(asctime)s %(module)s %(message)s',
+            'style': '%',
         },
         'scan_ops': {
-            'format': '[{asctime}] {message}',
-            'style': '{',
+            'format': '[%(asctime)s] %(message)s',
+            'style': '%',
             'datefmt': '%Y-%m-%d %H:%M:%S'
         },
     },
@@ -325,6 +361,7 @@ LOGGING = {
         'console': {
             'class': 'logging.StreamHandler',
             'formatter': 'verbose',
+            'level': 'INFO',  # Make sure INFO messages are shown
         },
         'scan_operations': {
             'class': 'logging.FileHandler',
@@ -338,11 +375,22 @@ LOGGING = {
             'formatter': 'verbose',
             'mode': 'a',
         },
+        'ai_file': {
+            'level': 'INFO',
+            'class': 'logging.FileHandler',
+            'filename': os.path.join(AI_CACHE_DIR, 'ai.log'),
+            'formatter': 'verbose',
+        },
     },
     'loggers': {
         'user_management': {  # This is your app name
             'handlers': ['console', 'scan_operations', 'debug_file'],
             'level': 'DEBUG',
+            'propagate': True,
+        },
+        'ai': {
+            'handlers': ['ai_file'],
+            'level': 'INFO',
             'propagate': True,
         },
     },
@@ -352,7 +400,23 @@ LOGGING = {
 NOTIFICATION_EMAIL_DIGEST = env_config('NOTIFICATION_EMAIL_DIGEST', default=True, cast=bool)
 NOTIFICATION_DIGEST_INTERVAL = env_config('NOTIFICATION_DIGEST_INTERVAL', default=24, cast=int)  # hours
 
+# AI-specific settings
+AI_SETTINGS = {
+    'MAX_PDF_SIZE': 50 * 1024 * 1024,  # 50MB
+    'SUPPORTED_FORMATS': ['pdf'],
+    'MAX_CONCURRENT_PROCESSES': 4,
+    'CACHE_TIMEOUT': 86400,  # 24 hours
+}
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+RELAY_URL = os.getenv('RELAY_URL', 'ws://192.168.72.19:8765')
+RELAY_TOKEN = os.getenv('RELAY_TOKEN', 'JXpV2Tl9UR1LQrhnhPQrzJ6GPCFlnEIzzlAkN3PkeT8')
+
+# Token for computer agent authentication - load from environment or use default for development
+COMPUTER_AGENT_TOKEN = os.getenv('COMPUTER_AGENT_TOKEN', 'JXpV2Tl9UR1LQrhnhPQrzJ6GPCFlnEIzzlAkN3PkeT8')
+
+INFOTECH_PASSWORD = os.getenv('INFOTECH_PASSWORD', 'gidget003')

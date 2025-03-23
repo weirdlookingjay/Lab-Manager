@@ -1,5 +1,9 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
+from django.utils.html import format_html
+from django.utils import timezone
+from datetime import timedelta
+
 from .models import (
     CustomUser, Computer, FileTransfer, AuditLog, Notification, Schedule,
     PasswordPolicy, LoginAttempt, UserSession
@@ -78,9 +82,40 @@ class UserSessionAdmin(admin.ModelAdmin):
     terminate_sessions.short_description = "Terminate selected sessions"
 
 class ComputerAdmin(admin.ModelAdmin):
-    list_display = ['label', 'ip_address', 'is_online', 'last_seen']
-    list_filter = ['is_online']
-    search_fields = ['label', 'ip_address']
+    list_display = ['label', 'ip_address', 'get_status', 'last_seen', 'logged_in_user', 'os_version', 'device_class']
+    list_filter = ['last_seen', 'last_metrics_update', 'device_class']
+    search_fields = ['label', 'ip_address', 'logged_in_user', 'hostname']
+    readonly_fields = [
+        'last_seen', 'last_metrics_update', 'metrics',
+        'device_class', 'boot_time', 'system_uptime'
+    ]
+    
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('label', 'hostname', 'ip_address', 'logged_in_user')
+        }),
+        ('System Information', {
+            'fields': ('os_version', 'model', 'device_class', 'boot_time', 'system_uptime')
+        }),
+        ('Metrics', {
+            'fields': ('metrics',)
+        }),
+        ('Timestamps', {
+            'fields': ('last_seen', 'last_metrics_update')
+        })
+    )
+
+    def get_status(self, obj):
+        """Get the computer's online status with colored indicator."""
+        status = obj.get_status()
+        color = '#28a745' if status == 'online' else '#dc3545'
+        return format_html(
+            '<span style="color: {};">●</span> {}',
+            color,
+            status.title()
+        )
+    get_status.short_description = 'Status'
+    get_status.admin_order_field = 'last_metrics_update'
 
 class FileTransferAdmin(admin.ModelAdmin):
     list_display = ['computer', 'timestamp', 'source_file', 'successful']

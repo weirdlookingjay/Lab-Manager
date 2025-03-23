@@ -1,0 +1,20 @@
+[
+  {
+    "type": "metrics",
+    "hostname": "545D9X1",
+    "timestamp": "2025-03-12T16:15:49.730998",
+    "logged_in_user": "Client",
+    "data": {
+      "cpu_percent": 1.6,
+      "memory_percent": 59.2,
+      "disk_usage": {
+        "C:": 13.4
+      },
+      "hostname": "545D9X1",
+      "ip_address": "192.168.72.50",
+      "os_version": "Windows 10",
+      "model": "Dell Inc. OptiPlex 7010"
+    },
+    "capture_timestamp": "2025-03-12T16:15:50.370541"
+  }
+]

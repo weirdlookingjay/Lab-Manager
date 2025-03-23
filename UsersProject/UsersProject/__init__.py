@@ -4,8 +4,4 @@ from __future__ import absolute_import, unicode_literals
 # Django starts so that shared_task will use this app.
 from .celery import app as celery_app
 
-CELERY_ACCEPT_CONTENT = ['application/json']
-CELERY_TASK_SERIALIZER = 'json'
-CELERY_RESULT_SERIALIZER = 'json'
-
 __all__ = ('celery_app',)

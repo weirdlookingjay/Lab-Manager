@@ -544,7 +544,7 @@ async def get_computers():
                 total_bytes_transferred,
                 os_version,
                 user_profile
-            FROM computers 
+            FROM user_management_computer 
             ORDER BY label ASC
         """)
         with engine.connect() as conn:
@@ -575,7 +575,7 @@ async def get_computer(ip_address: str):
     """Get a specific computer by IP address."""
     try:
         query = text("""
-            SELECT * FROM computers 
+            SELECT * FROM user_management_computer 
             WHERE ip_address = :ip_address
         """)
         with engine.connect() as conn:
@@ -593,7 +593,7 @@ async def update_computer_status(ip_address: str):
     """Update computer's online status and last seen time."""
     try:
         query = text("""
-            UPDATE computers 
+            UPDATE user_management_computer 
             SET last_seen = NOW(), is_online = TRUE
             WHERE ip_address = :ip_address
             RETURNING *
@@ -618,7 +618,7 @@ async def update_transfer_stats(
     """Update computer's file transfer statistics."""
     try:
         query = text("""
-            UPDATE computers 
+            UPDATE user_management_computer 
             SET 
                 last_transfer = NOW(),
                 total_transfers = total_transfers + 1,

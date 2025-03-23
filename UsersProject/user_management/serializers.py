@@ -1,10 +1,16 @@
 # user_management/serializers.py
+import logging
+import json
+from django.utils import timezone
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import make_password
 from .models import Computer, FileTransfer, AuditLog, Notification, Schedule, Tag, SystemLog, LogAggregation, LogPattern, LogAlert, LogCorrelation, ScanSchedule, DocumentTag
+from datetime import datetime
 
 User = get_user_model()
+
+logger = logging.getLogger(__name__)
 
 class UserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
@@ -27,24 +33,68 @@ class UserSerializer(serializers.ModelSerializer):
 
 class ComputerSerializer(serializers.ModelSerializer):
     status = serializers.SerializerMethodField()
-    name = serializers.CharField(source='label')
-    ip = serializers.CharField(source='ip_address')
-
-    def get_status(self, obj):
-        return 'online' if obj.is_online else 'offline'
+    ip = serializers.CharField(source='ip_address', required=False)  # For backward compatibility
+    uptime = serializers.CharField(source='format_uptime', read_only=True)
+    memory_gb = serializers.CharField(source='format_memory_gb', read_only=True)
+    disk_gb = serializers.CharField(source='format_disk_gb', read_only=True)
+    cpu_percent = serializers.SerializerMethodField()
+    memory_percent = serializers.SerializerMethodField()
+    disk_percent = serializers.SerializerMethodField()
 
     class Meta:
         model = Computer
         fields = [
-            'id', 'name', 'label', 'ip', 'status', 'last_seen',
-            'successful_transfers', 'failed_transfers', 'total_transfers',
-            'total_bytes_transferred', 'last_transfer', 'os_version',
-            'user_profile', 'username', 'password', 'model'
+            # Basic Info
+            'id', 'label', 'hostname', 'ip_address', 'ip', 'status',
+            'os_version', 'last_seen', 'last_metrics_update',
+            
+            # System Overview
+            'cpu_model', 'cpu_cores', 'cpu_threads', 'cpu_percent',
+            'memory_total', 'memory_usage', 'memory_gb', 'memory_percent',
+            'total_disk', 'disk_usage', 'disk_gb', 'disk_percent',
+            'device_class', 'boot_time', 'system_uptime', 'uptime',
+            'logged_in_user'
         ]
-        read_only_fields = ['id', 'last_seen', 'last_transfer']
-        extra_kwargs = {
-            'password': {'write_only': True}  # Ensure password is write-only
-        }
+        read_only_fields = [
+            'status', 'last_seen', 'last_metrics_update', 'uptime',
+            'memory_gb', 'disk_gb', 'cpu_percent', 'memory_percent',
+            'disk_percent'
+        ]
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        
+        # Format timestamps
+        for field in ['last_seen', 'last_metrics_update', 'boot_time']:
+            if data.get(field):
+                try:
+                    dt = datetime.fromisoformat(data[field].replace('Z', '+00:00'))
+                    data[field] = dt.strftime('%Y-%m-%d %H:%M:%S')
+                except (ValueError, AttributeError):
+                    pass
+        
+        return data
+
+    def get_status(self, obj):
+        """Get the online/offline status of the computer."""
+        thirty_mins_ago = timezone.now() - timezone.timedelta(minutes=30)
+        is_online = (
+            (obj.last_metrics_update and obj.last_metrics_update >= thirty_mins_ago) or
+            (obj.last_seen and obj.last_seen >= thirty_mins_ago)
+        )
+        return 'online' if is_online else 'offline'
+
+    def get_cpu_percent(self, obj):
+        """Get CPU usage percentage."""
+        return obj.cpu_percent if obj.cpu_percent is not None else 0
+
+    def get_memory_percent(self, obj):
+        """Get memory usage percentage."""
+        return obj.memory_percent if obj.memory_percent is not None else 0
+
+    def get_disk_percent(self, obj):
+        """Get disk usage percentage."""
+        return obj.disk_percent if obj.disk_percent is not None else 0
 
 class FileTransferSerializer(serializers.ModelSerializer):
     class Meta:

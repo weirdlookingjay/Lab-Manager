@@ -1,26 +1,47 @@
-from django.utils import timezone
-from celery import shared_task
-from .models import Computer, AuditLog, LogAggregation
-import pandas as pd
+from __future__ import absolute_import, unicode_literals
 import os
 import sys
-import time
+import json
 import logging
-import threading
-from datetime import datetime, timedelta
+import asyncio
+import websockets
+from datetime import datetime
+from celery import shared_task
+from django.utils import timezone
+from asgiref.sync import sync_to_async
+from .models import Computer, AuditLog, LogAggregation, SystemLog
+import pandas as pd
+from UsersProject.celery import app
+from pathlib import Path
 from django.conf import settings
 import shutil
 from .utils.pdf_processor import process_onet_pdf, is_onet_profile
-from UsersProject.celery import app
 from rest_framework.parsers import JSONParser
 from django.db import transaction
+import subprocess
+from typing import Dict, Any
 
-logger = logging.getLogger(__name__)
+# Configure logger
+logger = logging.getLogger('user_management')
 
 def log_message(message, level='INFO'):
     """Write log message to database and print it."""
-    AuditLog.objects.create(message=message, level=level)
-    print(f"[{timezone.now()}] {level}: {message}")
+    # Get the logger
+    logger = logging.getLogger('user_management')
+    
+    # Log based on level
+    if level == 'ERROR':
+        logger.error(message)
+    elif level == 'WARNING':
+        logger.warning(message)
+    else:
+        logger.info(message)
+    
+    # Also create log entry in database
+    try:
+        AuditLog.objects.create(message=message, level=level)
+    except Exception as e:
+        logger.error(f"Failed to create audit log entry: {str(e)}")
 
 def process_computer(computer_ip, computer_label):
     """Process a single computer's file operations."""
@@ -86,9 +107,9 @@ def run_file_operations():
                 if is_onet_profile(source_path):
                     success, result = process_onet_pdf(source_path)
                     if success:
-                        logger.info(f"Processed O*NET PDF: {result}")
+                        logging.info(f"Processed O*NET PDF: {result}")
                     else:
-                        logger.warning(f"Failed to process O*NET PDF: {result}")
+                        logging.warning(f"Failed to process O*NET PDF: {result}")
                 
                 # Move to backup directory
                 backup_path = os.path.join(backup_month_dir, filename)
@@ -103,17 +124,17 @@ def run_file_operations():
                 
                 # Copy file to backup location
                 shutil.copy2(source_path, backup_path)
-                logger.info(f"Backed up file: {filename} to {backup_path}")
+                logging.info(f"Backed up file: {filename} to {backup_path}")
                 
                 # Remove original file
                 os.remove(source_path)
-                logger.info(f"Removed original file: {source_path}")
+                logging.info(f"Removed original file: {source_path}")
                 
         return True, "File operations completed successfully"
         
     except Exception as e:
         error_message = f"Error in file operations: {str(e)}"
-        logger.error(error_message)
+        logging.error(error_message)
         return False, error_message
 
 def aggregate_system_logs(period='DAY'):
@@ -333,3 +354,254 @@ def schedule_file_operations(hour: int, minute: int, name: str = "daily_backup")
     except Exception as e:
         log_message(f"Error scheduling file operations: {str(e)}", 'ERROR')
         return False
+
+async def handle_message(message_str: str) -> None:
+    """Handle incoming message from relay server."""
+    try:
+        # Parse message
+        message = json.loads(message_str)
+        message_type = message.get('type')
+        
+        if not message_type:
+            logger.warning(f"Message missing type field: {message}")
+            return
+            
+        # Handle different message types
+        if message_type == 'metrics':
+            await handle_metrics_message(message.get('data', {}))
+        else:
+            logger.warning(f"Unknown message type: {message_type}")
+            
+    except json.JSONDecodeError:
+        logger.error(f"Failed to parse message as JSON: {message_str}")
+    except Exception as e:
+        logger.error(f"Error handling message: {str(e)}")
+        logger.error(f"Message: {message_str}")
+        logger.error(traceback.format_exc())
+
+async def handle_metrics_message(message: Dict[str, Any]) -> None:
+    """Handle incoming metrics message from relay server."""
+    try:
+        # Extract basic info
+        hostname = message.get('hostname')
+        ip_address = message.get('ip_address')
+        
+        if not hostname or not ip_address:
+            logger.warning(f"Missing required fields in metrics message: {message}")
+            return
+            
+        # Log raw metrics for debugging
+        logger.debug(f"Raw metrics data for {hostname}: {json.dumps(message, indent=2)}")
+        
+        # Get or create computer
+        computer = await sync_to_async(Computer.objects.get_or_create)(
+            hostname=hostname,
+            defaults={'ip_address': ip_address}
+        )[0]
+        
+        # Update IP if changed
+        if computer.ip_address != ip_address:
+            computer.ip_address = ip_address
+        
+        # Update last seen
+        computer.last_seen = timezone.now()
+        
+        # Transform metrics
+        metrics = {
+            'hostname': hostname,
+            'ip_address': ip_address,
+            'logged_in_user': message.get('logged_in_user'),
+            'cpu': message.get('cpu', {}),
+            'memory': message.get('memory', {}),
+            'disk': message.get('disk', {}),
+            'system': message.get('system', {}),
+            'status': 'online',
+            'last_seen': computer.last_seen.isoformat(),
+            'last_metrics_update': computer.last_seen.isoformat()
+        }
+        
+        # Log transformed metrics
+        logger.debug(f"Saving transformed metrics for {hostname}: {json.dumps(metrics, indent=2)}")
+        
+        # Log current metrics for comparison
+        logger.debug(f"Current computer metrics for {hostname}: {json.dumps(computer.metrics, indent=2) if computer.metrics else 'None'}")
+        
+        # Update computer metrics
+        await sync_to_async(computer.update_metrics)(metrics)
+        
+        # Log updated metrics
+        logger.debug(f"Updated computer metrics for {hostname}: {json.dumps(metrics, indent=2)}")
+        
+    except Exception as e:
+        logger.error(f"Error handling metrics message: {str(e)}")
+        logger.error(f"Message: {message}")
+        logger.error(traceback.format_exc())
+
+async def run_client(relay_url: str, token: str) -> None:
+    """Run the WebSocket relay client."""
+    try:
+        logger.info(f"Attempting to connect to {relay_url}")
+        
+        async with websockets.connect(relay_url) as websocket:
+            logger.info("Connected to relay server")
+            
+            # Send authentication
+            auth_message = json.dumps({
+                "type": "auth",
+                "token": token
+            })
+            await websocket.send(auth_message)
+            logger.info("Sent authentication message")
+            
+            # Wait for auth response
+            response = await websocket.recv()
+            response_data = json.loads(response)
+            
+            if response_data.get('type') != 'auth_success':
+                logger.error("Authentication failed")
+                return
+                
+            logger.info("Authentication successful")
+            
+            # Main message loop
+            while True:
+                try:
+                    message = await websocket.recv()
+                    await handle_message(message)
+                except websockets.exceptions.ConnectionClosed:
+                    logger.error("Connection closed unexpectedly")
+                    break
+                except Exception as e:
+                    logger.error(f"Error in message loop: {str(e)}")
+                    logger.error(traceback.format_exc())
+                    continue
+                    
+    except websockets.exceptions.WebSocketException as e:
+        logger.error(f"WebSocket error: {str(e)}")
+    except Exception as e:
+        logger.error(f"Error running client: {str(e)}")
+        logger.error(traceback.format_exc())
+
+@app.task
+def ensure_relay_client_running():
+    """Ensure the relay client is running."""
+    try:
+        # Get relay URL and token from environment
+        relay_url = os.getenv('RELAY_URL', 'ws://192.168.72.19:8765')
+        token = os.getenv('TOKEN', 'default_token')
+        
+        if not relay_url or not token:
+            logger.error("Missing RELAY_URL or TOKEN environment variables")
+            return
+            
+        logger.info(f"Environment loaded - RELAY_URL: {relay_url}, TOKEN: {'set' if token else 'not set'}")
+        
+        # Set up event loop
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+        logger.debug(f"Using proactor: {loop._proactor.__class__.__name__}")
+        logger.info("Created new event loop")
+        
+        # Run the client
+        loop.run_until_complete(run_client(relay_url, token))
+        
+    except Exception as e:
+        logger.error(f"Error ensuring relay client is running: {str(e)}")
+        logger.error(traceback.format_exc())
+
+@app.task
+def run_relay_client():
+    """Run the WebSocket relay client as a Celery task."""
+    try:
+        # Configure logging
+        logger = logging.getLogger('user_management')
+        logger.info("Logger configured successfully")
+
+        # Load environment variables
+        relay_url = os.getenv("RELAY_URL", "ws://localhost:8765")
+        token = os.getenv("DJANGO_TOKEN")
+        if not token:
+            raise ValueError("DJANGO_TOKEN environment variable not set")
+        logger.info(f"Environment loaded - RELAY_URL: {relay_url}, TOKEN: set")
+
+        # Create and configure event loop
+        if sys.platform == 'win32':
+            loop = asyncio.ProactorEventLoop()
+            logger.debug("Using proactor: IocpProactor")
+        else:
+            loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        logger.info("Created new event loop")
+
+        try:
+            # Run the client in the event loop
+            loop.run_until_complete(run_client(relay_url, token))
+        except Exception as e:
+            logger.error(f"Fatal error in relay client: {e}", exc_info=True)
+            raise  # Re-raise to let Celery know the task failed
+        finally:
+            loop.close()
+            logger.info("Event loop closed")
+
+    except Exception as e:
+        logger.error(f"Critical error in relay client task: {e}", exc_info=True)
+        raise  # Re-raise to mark the task as failed
+
+# Removed duplicate beat schedule here since it's already in settings.py
+
+from django.core.cache import cache
+from datetime import timedelta
+from .services.computer_service import ComputerService
+
+logger = logging.getLogger('user_management')
+computer_service = ComputerService()
+
+@app.task
+def monitor_relay_server():
+    async def connect_and_monitor():
+        uri = "ws://192.168.72.19:8765"
+        try:
+            async with websockets.connect(uri) as websocket:
+                # Register as monitor
+                reg_message = {
+                    "type": "register",
+                    "client_type": "monitor",
+                    "subscribe": ["metrics"]
+                }
+                
+                await websocket.send(json.dumps(reg_message))
+                response = await websocket.recv()
+                logger.info("Connected to relay server")
+                
+                while True:
+                    try:
+                        # Get raw message
+                        raw_message = await websocket.recv()
+                        message = json.loads(raw_message)
+                       
+                        # Only process metrics for specific computer
+                        if message.get('type') == 'update_metrics' and message.get('hostname') == '545D9X1':
+                            # Log the full message content
+                            logger.info(f"Processing metrics update: {json.dumps(message, indent=2)}")
+                            
+                            # Let service handle database update and logging
+                            try:
+                                computer_service.update_computer_from_metrics(
+                                    hostname=message.get('hostname'),
+                                    metrics_data=message
+                                )
+                                logger.info(f"Successfully updated computer metrics in database for {message.get('hostname')}")
+                            except Exception as e:
+                                logger.error(f"Failed to update computer metrics: {str(e)}", exc_info=True)
+                    
+                    except Exception as e:
+                        logger.error(f"Error processing message: {e}", exc_info=True)
+                        
+        except Exception as e:
+            logger.error(f"Connection error: {e}", exc_info=True)
+
+    asyncio.run(connect_and_monitor())
