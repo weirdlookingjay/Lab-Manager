@@ -48,7 +48,21 @@ class RelayClient:
                         "client_type": "django",
                         "token": self.django_token
                     }))
-                    logger.info("Registered with relay server")
+                    logger.info("Sent authentication message")
+
+                    # Wait for auth success response
+                    response = await websocket.recv()
+                    try:
+                        data = json.loads(response)
+                        if data.get('type') != 'auth_success':
+                            logger.error(f"Authentication failed: {data}")
+                            await asyncio.sleep(5)
+                            continue
+                        logger.info("Authentication successful")
+                    except json.JSONDecodeError:
+                        logger.error("Invalid authentication response")
+                        await asyncio.sleep(5)
+                        continue
 
                     # Handle incoming messages
                     async for message in websocket:

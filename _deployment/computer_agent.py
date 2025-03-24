@@ -148,13 +148,36 @@ class ComputerAgent:
         try:
             import cpuinfo
             info = cpuinfo.get_cpu_info()
+            speed = info.get('hz_advertised_friendly', None)
+            base_speed = info.get('hz_actual_friendly', None)
+            current_speed = info.get('hz_current_friendly', None)
+            
+            # Get the model info and extract manufacturer
+            model = info.get('brand_raw', platform.processor())
+            # Try to extract manufacturer from model string
+            manufacturer = None
+            if model:
+                # Common CPU manufacturer keywords
+                manufacturers = ['Intel', 'AMD', 'ARM']
+                model_upper = model.upper()
+                for m in manufacturers:
+                    if m.upper() in model_upper:
+                        manufacturer = m
+                        break
+            
+            if not manufacturer:
+                # Fallback to first word if no known manufacturer found
+                manufacturer = model.split()[0] if model else 'Unknown'
+            
             return {
-                'model': info.get('brand_raw', platform.processor()),
+                'model': model,
                 'architecture': info.get('arch', platform.machine()),
                 'cores': psutil.cpu_count(logical=False),
                 'threads': psutil.cpu_count(),
-                'speed': info.get('hz_advertised_float', 
-                                psutil.cpu_freq().current if psutil.cpu_freq() else None)
+                'speed': f"{speed:.1f}" if speed else None,
+                'base_speed': f"{base_speed:.1f}" if base_speed else None,
+                'current_speed': f"{current_speed:.1f}" if current_speed else None,
+                'manufacturer': manufacturer
             }
         except ImportError:
             # Fallback if py-cpuinfo is not available

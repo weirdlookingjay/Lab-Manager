@@ -3,17 +3,19 @@ import os
 import sys
 import json
 import logging
+import traceback
 import asyncio
 import websockets
-from datetime import datetime
+from datetime import datetime, timedelta
 from celery import shared_task
+from celery.utils.log import get_task_logger
 from django.utils import timezone
+from django.conf import settings
 from asgiref.sync import sync_to_async
 from .models import Computer, AuditLog, LogAggregation, SystemLog
 import pandas as pd
 from UsersProject.celery import app
 from pathlib import Path
-from django.conf import settings
 import shutil
 from .utils.pdf_processor import process_onet_pdf, is_onet_profile
 from rest_framework.parsers import JSONParser
@@ -369,6 +371,8 @@ async def handle_message(message_str: str) -> None:
         # Handle different message types
         if message_type == 'metrics':
             await handle_metrics_message(message.get('data', {}))
+        elif message_type == 'update_computer':
+            await handle_computer_update(message.get('data', {}))
         else:
             logger.warning(f"Unknown message type: {message_type}")
             
@@ -437,6 +441,32 @@ async def handle_metrics_message(message: Dict[str, Any]) -> None:
         logger.error(f"Message: {message}")
         logger.error(traceback.format_exc())
 
+async def handle_computer_update(data: Dict[str, Any]) -> None:
+    """Handle computer update message."""
+    try:
+        hostname = data.get('hostname')
+        if not hostname:
+            logger.error("Computer update missing hostname")
+            return
+            
+        # Wrap database operations in sync_to_async
+        computer = await sync_to_async(Computer.objects.filter)(hostname=hostname)
+        computer = await sync_to_async(computer.first)()
+        
+        if not computer:
+            logger.warning(f"Computer not found: {hostname}")
+            return
+            
+        # Update computer metrics
+        await sync_to_async(computer.update_metrics)(data)
+        await sync_to_async(computer.save)()
+        
+        logger.info(f"Updated computer: {hostname}")
+        
+    except Exception as e:
+        logger.error(f"Error handling computer update: {str(e)}")
+        logger.error(traceback.format_exc())
+
 async def run_client(relay_url: str, token: str) -> None:
     """Run the WebSocket relay client."""
     try:
@@ -447,7 +477,7 @@ async def run_client(relay_url: str, token: str) -> None:
             
             # Send authentication
             auth_message = json.dumps({
-                "type": "auth",
+                "client_type": "django",
                 "token": token
             })
             await websocket.send(auth_message)
@@ -488,10 +518,10 @@ def ensure_relay_client_running():
     try:
         # Get relay URL and token from environment
         relay_url = os.getenv('RELAY_URL', 'ws://192.168.72.19:8765')
-        token = os.getenv('TOKEN', 'default_token')
+        token = os.getenv('DJANGO_TOKEN')
         
-        if not relay_url or not token:
-            logger.error("Missing RELAY_URL or TOKEN environment variables")
+        if not token:
+            logger.error("Missing DJANGO_TOKEN environment variable")
             return
             
         logger.info(f"Environment loaded - RELAY_URL: {relay_url}, TOKEN: {'set' if token else 'not set'}")

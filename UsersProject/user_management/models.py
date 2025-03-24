@@ -137,6 +137,7 @@ class Computer(models.Model):
     disk_usage = models.FloatField(null=True, blank=True)
     disk_percent = models.FloatField(null=True, blank=True)
     device_class = models.CharField(max_length=50, null=True, blank=True)
+    manufacturer = models.CharField(max_length=255, null=True, blank=True)
     boot_time = models.DateTimeField(null=True, blank=True)
     last_seen = models.DateTimeField(null=True, blank=True)
     last_metrics_update = models.DateTimeField(null=True, blank=True)
@@ -228,9 +229,11 @@ class Computer(models.Model):
         if not metrics_data:
             return
 
-        # Update the raw metrics JSON field
+        # Update basic metrics
         self.metrics = metrics_data
-
+        self.last_metrics_update = timezone.now()
+        self.manufacturer = metrics_data.get('manufacturer')
+        
         # Update CPU metrics
         if 'cpu' in metrics_data:
             cpu_data = metrics_data['cpu']
@@ -274,7 +277,6 @@ class Computer(models.Model):
             self.ip_address = metrics_data['ip_address']
 
         # Update timestamps
-        self.last_metrics_update = timezone.now()
         if 'last_seen' in metrics_data:
             self.last_seen = metrics_data['last_seen']
 

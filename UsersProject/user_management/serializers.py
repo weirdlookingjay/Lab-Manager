@@ -40,25 +40,25 @@ class ComputerSerializer(serializers.ModelSerializer):
     cpu_percent = serializers.SerializerMethodField()
     memory_percent = serializers.SerializerMethodField()
     disk_percent = serializers.SerializerMethodField()
+    metrics = serializers.JSONField(read_only=True)
 
     class Meta:
         model = Computer
         fields = [
             # Basic Info
             'id', 'label', 'hostname', 'ip_address', 'ip', 'status',
-            'os_version', 'last_seen', 'last_metrics_update',
-            
+            'os_version', 'last_seen', 'last_metrics_update', 'manufacturer',
             # System Overview
             'cpu_model', 'cpu_cores', 'cpu_threads', 'cpu_percent',
             'memory_total', 'memory_usage', 'memory_gb', 'memory_percent',
             'total_disk', 'disk_usage', 'disk_gb', 'disk_percent',
             'device_class', 'boot_time', 'system_uptime', 'uptime',
-            'logged_in_user'
+            'logged_in_user', 'metrics'
         ]
         read_only_fields = [
             'status', 'last_seen', 'last_metrics_update', 'uptime',
             'memory_gb', 'disk_gb', 'cpu_percent', 'memory_percent',
-            'disk_percent'
+            'disk_percent', 'metrics'
         ]
 
     def to_representation(self, instance):

@@ -177,7 +177,7 @@ class ComputerAgent:
                 'speed': f"{speed:.1f}" if speed else None,
                 'base_speed': f"{base_speed:.1f}" if base_speed else None,
                 'current_speed': f"{current_speed:.1f}" if current_speed else None,
-                'manufacturer': info.get('vendor_id_raw', 'Unknown')
+                'manufacturer': info.get('brand_raw', 'Unknown').split()[0]
             }
         except ImportError:
             # Fallback if py-cpuinfo is not available
