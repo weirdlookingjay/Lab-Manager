@@ -1,103 +1,116 @@
 'use client';
 
-import { ArrowLeft } from "lucide-react";
+import { Computer } from '@/types/computer';
+import { useEffect, useState } from 'react';
+import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
-import SystemOverview from "@/components/computers/SystemOverview";
-import SystemInformation from "@/components/computers/SystemInformation";
-import { ProcessesSection } from "@/components/computers/ProcessesSection";
-import ToolsSection from "@/components/computers/ToolsSection";
-import { useTheme } from "@/hooks/useTheme";
-import { useState } from 'react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import SystemInformation from '@/components/computers/SystemInformation';
+import SystemOverview from '@/components/computers/SystemOverview';
+import { ProcessesSection } from '@/components/computers/ProcessesSection';
+import { ToolsSection } from '@/components/computers/ToolsSection';
+
+
 
 interface ComputerPageClientProps {
-  computer: any;
+    id: string;
+    token?: string;
 }
 
-export default function ComputerPageClient({ computer }: ComputerPageClientProps) {
-  const { theme, mode } = useTheme();
-  const [activeTab, setActiveTab] = useState('overview');
+export default function ComputerPageClient({ id, token }: ComputerPageClientProps) {
+    const [computer, setComputer] = useState<Computer | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
-  const tabs = [
-    { id: 'overview', label: 'Overview' },
-    { id: 'tools', label: 'Tools' },
-    { id: 'monitoring', label: 'Monitoring' },
-    { id: 'asset', label: 'Asset' },
-    { id: 'notes', label: 'Notes' },
-    { id: 'settings', label: 'Settings' },
-    { id: 'remote', label: 'Remote Control Settings' },
-    { id: 'reports', label: 'Reports' }
-  ];
+    useEffect(() => {
+        const fetchComputer = async () => {
+            try {
+                const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/computers/${id}/`, {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Token ${token}`
+                    }
+                });
 
-  return (
-    <div className={`flex flex-col h-full ${mode === 'dark' ? 'dark' : ''}`}>
-      <div className={`flex items-center gap-3 px-3 py-2 bg-${theme}-600 text-white dark:bg-${theme}-900`}>
-        <Link href="/computers" className="hover:opacity-80 transition-opacity">
-          <ArrowLeft className="h-4 w-4" />
-        </Link>
-        <h1 className="text-xs font-medium">{computer.hostname}</h1>
-        <div className="flex items-center gap-1">
-          <div className={`h-1.5 w-1.5 rounded-full ${computer.status === 'online' ? 'bg-emerald-400' : 'bg-red-400'} animate-pulse`} />
-          <span className="text-[11px] opacity-90">{computer.status === 'online' ? 'Online' : 'Offline'}</span>
-        </div>
-        <div className="text-[11px] opacity-80">
-          Last seen: {computer.last_seen}
-        </div>
-        <div className="text-[11px] opacity-80">
-          Last metrics: {computer.last_metrics_update}
-        </div>
-      </div>
+                if (!response.ok) {
+                    throw new Error('Failed to fetch computer');
+                }
 
-      <SystemOverview computer={computer} />
+                const data = await response.json();
+                setComputer(data);
+                setError(null);
+            } catch (err) {
+                setError(err instanceof Error ? err.message : 'An error occurred');
+            } finally {
+                setLoading(false);
+            }
+        };
 
-      <nav className={`border-b border-${mode === 'dark' ? 'gray-700' : 'gray-200'} bg-white dark:bg-gray-800`}>
-        <div className="flex overflow-x-auto">
-          {tabs.map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`px-3 py-1.5 text-[11px] font-medium border-b-2 whitespace-nowrap ${
-                activeTab === tab.id
-                  ? `text-${theme}-600 dark:text-${theme}-400 border-${theme}-600 dark:border-${theme}-400`
-                  : 'text-gray-500 dark:text-gray-400 border-transparent hover:text-gray-700 dark:hover:text-gray-300'
-              } -mb-px`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      </nav>
+        fetchComputer();
+    }, [id, token]);
 
-      <div className="flex-1 bg-white dark:bg-gray-900">
-        <div className="p-4 space-y-4">
-          {activeTab === 'overview' && (
-            <>
-              <SystemInformation computer={computer} />
-              <ProcessesSection computer={computer} />
-            </>
-          )}
-          {activeTab === 'tools' && (
-            <ToolsSection computer={computer} />
-          )}
-          {activeTab === 'monitoring' && (
-            <div>Monitoring content</div>
-          )}
-          {activeTab === 'asset' && (
-            <div>Asset content</div>
-          )}
-          {activeTab === 'notes' && (
-            <div>Notes content</div>
-          )}
-          {activeTab === 'settings' && (
-            <div>Settings content</div>
-          )}
-          {activeTab === 'remote' && (
-            <div>Remote Control Settings content</div>
-          )}
-          {activeTab === 'reports' && (
-            <div>Reports content</div>
-          )}
+    if (loading) return <div>Loading...</div>;
+    if (error) return <div>Error: {error}</div>;
+    if (!computer) return <div>Computer not found</div>;
+
+    const tabs = [
+        { id: "overview", label: "Overview" },
+        { id: "tools", label: "Tools" },
+        { id: "monitoring", label: "Monitoring" },
+        { id: "settings", label: "Settings" }
+    ];
+
+    return (
+        <div className="space-y-4">
+            <div className="flex items-center space-x-2">
+                <Link href="/computers" className="text-gray-500 hover:text-gray-700">
+                    <ArrowLeft className="h-4 w-4" />
+                </Link>
+                <h1 className="text-2xl font-bold">{computer.label || computer.hostname || computer.ip_address}</h1>
+                <div className="flex items-center space-x-1">
+                    <div className={`h-2 w-2 rounded-full ${computer.status === 'online' ? 'bg-green-500' : 'bg-red-500'} animate-pulse`} />
+                    <span className="text-sm text-gray-500">{computer.status === 'online' ? 'Online' : 'Offline'}</span>
+                </div>
+                <div className="text-sm text-gray-500">
+                    Last seen: {computer.last_seen}
+                </div>
+                {computer.last_metrics_update && (
+                    <div className="text-sm text-gray-500">
+                        Last metrics: {computer.last_metrics_update}
+                    </div>
+                )}
+            </div>
+
+            <SystemOverview computer={computer} token={token} />
+
+            <Tabs defaultValue="overview">
+                <TabsList>
+                    {tabs.map((tab) => (
+                        <TabsTrigger key={tab.id} value={tab.id}>
+                            {tab.label}
+                        </TabsTrigger>
+                    ))}
+                </TabsList>
+
+                <TabsContent value="overview">
+                    <div className="space-y-4">
+                        <SystemInformation computer={computer} />
+                        <ProcessesSection computer={computer} />
+                    </div>
+                </TabsContent>
+
+                <TabsContent value="tools">
+                    <ToolsSection computerId={computer.id} />
+                </TabsContent>
+
+                <TabsContent value="monitoring">
+                    <div>Monitoring content</div>
+                </TabsContent>
+
+                <TabsContent value="settings">
+                    <div>Settings content</div>
+                </TabsContent>
+            </Tabs>
         </div>
-      </div>
-    </div>
-  );
+    );
 }

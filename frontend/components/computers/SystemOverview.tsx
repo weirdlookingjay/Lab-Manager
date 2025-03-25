@@ -1,155 +1,154 @@
 import React from 'react';
-import { Computer } from '@/lib/types';
-import {
-  BsMemory, BsWindows,
-  BsPerson, BsClock, BsGlobe, BsCalendar3, BsBuilding, BsBox
-} from 'react-icons/bs';
-import { useTheme } from '@/hooks/useTheme';
+import { Computer } from '@/types/computer';
 import { useMetricsPolling } from '@/hooks/useMetricsPolling';
+import { FaMemory, FaHdd, FaMicrochip, FaWindows, FaClock, FaDesktop, FaNetworkWired, FaUser } from 'react-icons/fa';
 
 interface SystemOverviewProps {
   computer: Computer;
+  token?: string;
 }
 
-const formatOsVersion = (osVersion: string | null): string => {
-  if (!osVersion) return 'Not Available';
-  
-  // Match "Windows-" followed by version number
-  const match = osVersion.match(/^Windows-(\d+)/);
-  if (match) {
-    return `Windows-${match[1]}`;
-  }
-  
-  return osVersion;
-};
+export default function SystemOverview({ computer, token }: SystemOverviewProps) {
+  // Polling for updates but using computer object directly since it has all the data
+  useMetricsPolling(computer.id, token);
 
-export default function SystemOverview({ computer }: SystemOverviewProps) {
-  const { theme } = useTheme();
-  const { metrics } = useMetricsPolling(computer.id, 5000); // Poll every 5 seconds
-
-  // Merge real-time metrics with computer data
-  const cpuUsage = metrics?.metrics?.cpu?.percent ?? metrics?.cpu_percent ?? computer.metrics?.cpu?.percent ?? computer.cpu_percent ?? 0;
-  const cpuSpeed = metrics?.metrics?.cpu?.speed ?? metrics?.cpu_speed ?? computer.metrics?.cpu?.speed ?? computer.cpu_speed ?? 3.30;
-  const memoryPercent = metrics?.memory_percent ?? computer.memory_percent ?? 0;
-  const memoryGB = metrics?.memory_gb ?? computer.memory_gb ?? '0';
-  
-  // Usage stats section
-  const usageStats = [
-    {
-      label: 'CPU USAGE',
-      value: `${cpuUsage}%`,
-      subValue: `${cpuSpeed} GHz`,
-      width: cpuUsage,
-      color: `var(--${theme}-600)`
-    },
-    {
-      label: 'MEMORY USAGE',
-      value: `${memoryPercent}%`,
-      subValue: `${memoryGB} GB`,
-      width: memoryPercent,
-      color: `var(--${theme}-600)`
-    }
-  ];
-
-  const leftColumn = [
-    {
-      label: 'LAST DISCOVERY',
-      value: computer.last_metrics_update || 'Not Available',
-      icon: <BsCalendar3 size={14} className={`text-${theme}-100`} />
-    },
-    {
-      label: 'MANUFACTURER',
-      value: (metrics?.metrics?.cpu?.manufacturer ?? metrics?.cpu?.manufacturer ?? computer.metrics?.cpu?.manufacturer) || 'Not Available',
-      icon: <BsBuilding size={14} className={`text-${theme}-100`} />
-    },
-    {
-      label: 'MEMORY',
-      value: `${memoryGB} GB (${memoryPercent}% Used)`,
-      icon: <BsMemory size={14} className={`text-${theme}-100`} />
-    },
-    {
-      label: 'OPERATING SYSTEM',
-      value: formatOsVersion(computer.os_version),
-      icon: <BsWindows size={14} className={`text-${theme}-100`} />
-    }
-  ];
-
-  const rightColumn = [
-    {
-      icon: <BsClock size={14} className={`text-${theme}-100`} />,
-      label: 'UPTIME',
-      value: computer.uptime || 'Not Available'
-    },
-    {
-      label: 'DEVICE CLASS',
-      value: computer.device_class || 'Not Available',
-      icon: <BsBox size={14} className={`text-${theme}-100`} />
-    },
-    {
-      label: 'NETWORKING',
-      value: `${computer.label || 'Unknown'} (${computer.ip_address || 'No IP'})`,
-      icon: <BsGlobe size={14} className={`text-${theme}-100`} />
-    },
-    {
-      label: 'LOGGED IN USER',
-      value: computer.logged_in_user || 'Not Available',
-      icon: <BsPerson size={14} className={`text-${theme}-100`} />
-    }
-  ];
+  // Format Windows version to just show Windows-10 or Windows-11
+  const formatWindowsVersion = (version: string | undefined) => {
+    if (!version) return 'Not Available';
+    const match = version.match(/^(Windows-\d+)/);
+    return match ? match[1] : version;
+  };
 
   return (
-    <div className="bg-white p-4">
-      <div className="grid grid-cols-12 gap-4">
-        {/* Left Column */}
-        <div className="col-span-5 space-y-1">
-          {leftColumn.map((item, index) => (
-            <div key={index} className="flex">
-              <div className={`flex items-center gap-2 bg-${theme}-600 text-white px-3 py-1 w-40`}>
-                {item.icon}
-                <span className="text-xs whitespace-nowrap">{item.label}</span>
-              </div>
-              <div className={`flex-1 bg-gray-50 dark:bg-gray-800 px-2 py-1 text-gray-900 dark:text-gray-100 min-w-[100px]`}>
-                <span className="text-xs">{item.value}</span>
-              </div>
-            </div>
-          ))}
+    <div className="grid grid-cols-3 gap-8 p-4">
+      {/* Left Column */}
+      <div className="space-y-1">
+        <div className="flex items-center">
+          <div className="bg-blue-600 text-white px-3 py-1.5 rounded-sm flex items-center gap-2 min-w-[90px]">
+            <FaMicrochip size={12} />
+            <span className="text-xs font-medium">CPU</span>
+          </div>
+          <div className="bg-gray-100 flex-1 px-3 py-1.5 rounded-sm ml-1">
+            <span className="text-xs">{computer.metrics?.metrics?.cpu?.percent?.toFixed(1) || '0'}%</span>
+          </div>
         </div>
 
-        {/* Right Column */}
-        <div className="col-span-4 space-y-1">
-          {rightColumn.map((item, index) => (
-            <div key={index} className="flex">
-              <div className={`flex items-center gap-2 bg-${theme}-600 text-white px-3 py-1 w-40`}>
-                {item.icon}
-                <span className="text-xs whitespace-nowrap">{item.label}</span>
-              </div>
-              <div className={`flex-1 bg-gray-50 dark:bg-gray-800 px-2 py-1 text-gray-900 dark:text-gray-100 min-w-[100px]`}>
-                <span className="text-xs">{item.value}</span>
-              </div>
-            </div>
-          ))}
+        <div className="flex items-center">
+          <div className="bg-blue-600 text-white px-3 py-1.5 rounded-sm flex items-center gap-2 min-w-[90px]">
+            <FaHdd size={12} />
+            <span className="text-xs font-medium">DISK</span>
+          </div>
+          <div className="bg-gray-100 flex-1 px-3 py-1.5 rounded-sm ml-1">
+            <span className="text-xs">{computer.disk_percent?.toFixed(1) || '0'}%</span>
+          </div>
         </div>
 
-        {/* Usage Stats Section */}
-        <div className="col-span-3 space-y-6">
-          {usageStats.map((stat, index) => (
-            <div key={index}>
-              <div className="flex justify-between mb-1">
-                <div className={`text-xs text-${theme}-600 dark:text-${theme}-400 uppercase font-medium`}>{stat.label}</div>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-2xl font-medium" style={{ color: stat.color }}>{stat.value}</span>
-                  <span className="text-xs text-gray-500 dark:text-gray-400">{stat.subValue}</span>
-                </div>
-              </div>
+        <div className="flex items-center">
+          <div className="bg-blue-600 text-white px-3 py-1.5 rounded-sm flex items-center gap-2 min-w-[90px]">
+            <FaMemory size={12} />
+            <span className="text-xs font-medium">MEMORY</span>
+          </div>
+          <div className="bg-gray-100 flex-1 px-3 py-1.5 rounded-sm ml-1">
+            <span className="text-xs">{computer.memory_percent?.toFixed(1) || '0'}%</span>
+          </div>
+        </div>
 
-              <div className="w-full bg-gray-100 dark:bg-gray-800 rounded-full h-2">
-                <div 
-                  className={`h-2 rounded-full transition-all duration-300 bg-${theme}-600 dark:bg-${theme}-500`}
-                  style={{ width: `${stat.width}%` }}
-                />
+        <div className="flex items-center">
+          <div className="bg-blue-600 text-white px-3 py-1.5 rounded-sm flex items-center gap-2 min-w-[90px]">
+            <FaWindows size={12} />
+            <span className="text-xs font-medium">OS</span>
+          </div>
+          <div className="bg-gray-100 flex-1 px-3 py-1.5 rounded-sm ml-1">
+            <span className="text-xs">{formatWindowsVersion(computer.metrics?.metrics?.system?.os_version)}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Middle Column */}
+      <div className="space-y-1">
+        <div className="flex items-center">
+          <div className="bg-blue-600 text-white px-3 py-1.5 rounded-sm flex items-center gap-2 min-w-[90px]">
+            <FaClock size={12} />
+            <span className="text-xs font-medium">UPTIME</span>
+          </div>
+          <div className="bg-gray-100 flex-1 px-3 py-1.5 rounded-sm ml-1">
+            <span className="text-xs">{computer.metrics?.metrics?.system?.uptime || 'Not Available'}</span>
+          </div>
+        </div>
+
+        <div className="flex items-center">
+          <div className="bg-blue-600 text-white px-3 py-1.5 rounded-sm flex items-center gap-2 min-w-[90px]">
+            <FaDesktop size={12} />
+            <span className="text-xs font-medium">DEVICE CLASS</span>
+          </div>
+          <div className="bg-gray-100 flex-1 px-3 py-1.5 rounded-sm ml-1">
+            <span className="text-xs">{computer.metrics?.metrics?.system?.device_class || 'Not Available'}</span>
+          </div>
+        </div>
+
+        <div className="flex items-center">
+          <div className="bg-blue-600 text-white px-3 py-1.5 rounded-sm flex items-center gap-2 min-w-[90px]">
+            <FaNetworkWired size={12} />
+            <span className="text-xs font-medium">IP ADDRESS</span>
+          </div>
+          <div className="bg-gray-100 flex-1 px-3 py-1.5 rounded-sm ml-1">
+            <span className="text-xs">{computer.ip_address || 'No IP'}</span>
+          </div>
+        </div>
+
+        <div className="flex items-center">
+          <div className="bg-blue-600 text-white px-3 py-1.5 rounded-sm flex items-center gap-2 min-w-[90px]">
+            <FaUser size={12} />
+            <span className="text-xs font-medium">LOGGED IN USER</span>
+          </div>
+          <div className="bg-gray-100 flex-1 px-3 py-1.5 rounded-sm ml-1">
+            <span className="text-xs">{computer.metrics?.metrics?.system?.logged_in_user || 'Not Available'}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Right Column */}
+      <div className="space-y-8">
+        <div>
+          <div className="flex items-center mb-1">
+            <div className="flex items-center gap-2">
+              <FaMicrochip size={12} className="text-blue-600" />
+              <span className="text-xs font-medium">CPU USAGE</span>
+            </div>
+            <div className="flex-1 text-right">
+              <div className="flex items-center gap-3 justify-end">
+                <span className="text-xs">{computer.metrics?.metrics?.cpu?.percent?.toFixed(1) || '0'}%</span>
+                <span className="text-xs text-gray-500">{computer.metrics?.metrics?.cpu?.speed || '0'} GHz</span>
               </div>
             </div>
-          ))}
+          </div>
+          <div className="h-1.5 bg-blue-100 rounded-full overflow-hidden w-full">
+            <div 
+              className="h-full bg-blue-600 transition-all duration-300"
+              style={{ width: `${computer.metrics?.metrics?.cpu?.percent || 0}%` }}
+            />
+          </div>
+        </div>
+
+        <div>
+          <div className="flex items-center mb-1">
+            <div className="flex items-center gap-2">
+              <FaMemory size={12} className="text-blue-600" />
+              <span className="text-xs font-medium">MEMORY USAGE</span>
+            </div>
+            <div className="flex-1 text-right">
+              <div className="flex items-center gap-3 justify-end">
+                <span className="text-xs">{computer.memory_percent?.toFixed(1) || '0'}%</span>
+                <span className="text-xs text-orange-500">{computer.memory_gb || '0'} GB</span>
+              </div>
+            </div>
+          </div>
+          <div className="h-1.5 bg-blue-100 rounded-full overflow-hidden w-full">
+            <div 
+              className="h-full bg-blue-600 transition-all duration-300"
+              style={{ width: `${computer.memory_percent || 0}%` }}
+            />
+          </div>
         </div>
       </div>
     </div>

@@ -1,73 +1,59 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { formatDistanceToNow } from 'date-fns';
-import { Computer } from "@/lib/types";
-import { Monitor } from 'lucide-react';
+import { Computer } from "@/types/computer";
+import { formatBytes } from "@/lib/utils";
 
-interface SystemInfoProps {
-  computer: Computer;
+interface SystemInfoCardProps {
+    computer: Computer;
 }
 
-export function SystemInfoCard({ computer }: SystemInfoProps) {
-  const lastSeen = computer.last_seen
-    ? formatDistanceToNow(new Date(computer.last_seen), { addSuffix: true })
-    : 'Never';
+export function SystemInfoCard({ computer }: SystemInfoCardProps) {
+    return (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">CPU Usage</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <div className="text-2xl font-bold">{computer.cpu_percent.toFixed(1)}%</div>
+                    <p className="text-xs text-muted-foreground">
+                        {computer.cpu_model} ({computer.cpu_count} cores)
+                    </p>
+                </CardContent>
+            </Card>
 
-  return (
-    <Card className="col-span-2">
-      <CardHeader>
-        <div className="flex items-center gap-2">
-          <Monitor className="h-5 w-5" />
-          <CardTitle>SYSTEM INFORMATION</CardTitle>
+            <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Memory Usage</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <div className="text-2xl font-bold">{computer.memory_usage.toFixed(1)}%</div>
+                    <p className="text-xs text-muted-foreground">
+                        {formatBytes(computer.memory_used)} / {formatBytes(computer.memory_total)}
+                    </p>
+                </CardContent>
+            </Card>
+
+            <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Disk Usage</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <div className="text-2xl font-bold">{computer.disk_usage.toFixed(1)}%</div>
+                    <p className="text-xs text-muted-foreground">
+                        {formatBytes(computer.disk_used)} / {formatBytes(computer.disk_total)}
+                    </p>
+                </CardContent>
+            </Card>
+
+            <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Network</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <div className="text-2xl font-bold">{computer.network_interfaces.length}</div>
+                    <p className="text-xs text-muted-foreground">Active Interfaces</p>
+                </CardContent>
+            </Card>
         </div>
-      </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <div>
-              <div className="text-sm text-muted-foreground">LAST SEEN</div>
-              <div>{lastSeen}</div>
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">DEVICE CLASS</div>
-              <div>{computer.metrics.system.device_class || 'Unknown'}</div>
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">OS VERSION</div>
-              <div>{computer.metrics.system.os_version || 'Unknown'}</div>
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">CPU MODEL</div>
-              <div>{computer.metrics.cpu.model || 'Unknown'}</div>
-            </div>
-          </div>
-          <div className="space-y-2">
-            <div>
-              <div className="text-sm text-muted-foreground">LOGGED IN USER</div>
-              <div>{computer.metrics.system.logged_in_user || 'None'}</div>
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">HOSTNAME</div>
-              <div>{computer.hostname || 'Unknown'}</div>
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">MANUFACTURER</div>
-              <div>{computer.model?.split(' ')[0] || 'Unknown'}</div>
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">UPTIME</div>
-              <div>{computer.metrics.system.uptime || 'Unknown'}</div>
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">TOTAL MEMORY</div>
-              <div>{computer.metrics.memory.total_gb || 'Unknown'} GB</div>
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">TOTAL DISK SPACE</div>
-              <div>{computer.metrics.disk.total_gb || 'Unknown'} GB</div>
-            </div>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
+    );
 }

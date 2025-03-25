@@ -12,14 +12,23 @@ interface MetricsResponse {
   cpu?: CpuMetrics;
 }
 
-export function useMetricsPolling(computerId: string, interval: number = 5000) {
+export function useMetricsPolling(computerId: string, token?: string, interval: number = 5000) {
   const [metrics, setMetrics] = useState<MetricsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchMetrics = async () => {
       try {
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/computers/${computerId}/metrics`);
+        const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+        const url = new URL(`/api/computers/${computerId}/`, baseUrl);
+        
+        const response = await fetch(url.toString(), {
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Token ${token}` } : {})
+          },
+          method: 'GET'
+        });
         if (!response.ok) throw new Error('Failed to fetch metrics');
         const data = await response.json();
         setMetrics(data);
@@ -29,15 +38,17 @@ export function useMetricsPolling(computerId: string, interval: number = 5000) {
       }
     };
 
-    // Initial fetch
-    fetchMetrics();
+    if (computerId) {
+      // Initial fetch
+      fetchMetrics();
 
-    // Set up polling
-    const pollInterval = setInterval(fetchMetrics, interval);
+      // Set up polling
+      const pollInterval = setInterval(fetchMetrics, interval);
 
-    // Cleanup
-    return () => clearInterval(pollInterval);
-  }, [computerId, interval]);
+      // Cleanup
+      return () => clearInterval(pollInterval);
+    }
+  }, [computerId, token, interval]);
 
   return { metrics, error };
 }

@@ -64,6 +64,9 @@ class ComputerSerializer(serializers.ModelSerializer):
     def to_representation(self, instance):
         data = super().to_representation(instance)
         
+        # Get status before formatting timestamps
+        data['status'] = self.get_status(instance)
+        
         # Format timestamps
         for field in ['last_seen', 'last_metrics_update', 'boot_time']:
             if data.get(field):
